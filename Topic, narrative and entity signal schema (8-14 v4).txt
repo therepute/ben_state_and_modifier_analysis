@@ -1,0 +1,327 @@
+﻿{
+  "schema_version": "1.0.0",
+  "scope": "Pass 1 (article-level) states and modifiers for topic, narrative, and entity",
+  "assumptions": {
+    "study_entities_count_range": [3, 5],
+    "prominence_scale": [0, 5],
+    "sentiment_scale": [-4, 4],
+    "outlet_score_scale": [1, 5],
+    "definitions": {
+      "prominent_entity_threshold": 2.0,
+      "central_prominence_threshold": 2.5,
+      "leader_prominence_threshold": 3.0,
+      "breakthrough_prominence_threshold": 4.0,
+      "high_tier_outlet_threshold": 4
+    }
+  },
+  "field_contract": {
+    "required_fields": [
+      "topic_present",                // boolean
+      "topic_prom",                   // number (0–5)
+      "topic_sent",                   // number (-4..+4)
+      "narrative_present",            // boolean (for the narrative being evaluated in this row)
+      "narrative_prom",               // number (0–5) for the narrative on this row
+      "narrative_sent",               // number (-4..+4) for the narrative on this row
+      "entity_present",               // boolean for the evaluated entity
+      "entity_prom",                  // number (0–5)
+      "entity_sent",                  // number (-4..+4)
+      "outlet_score",                 // integer 1..5
+      "tracked_entities_in_article",  // integer (# of tracked entities mentioned anywhere, including low prominence)
+      "prominent_tracked_entities_in_article" // integer (# of tracked entities with prominence >= 2.0)
+    ],
+    "optional_fields": [
+      "headline_mention",             // boolean (if the entity is in headline) — not used in Pass-1
+      "quote_present",                // boolean (if the entity is quoted) — not used in Pass-1
+      "message_match"                 // boolean (if message match was detected) — used only in certain modifiers
+    ],
+    "notes": "If your sheet uses different column names, map them 1:1 to these keys before applying rules."
+  },
+
+
+  "precedence_rules": {
+    "topic_state_precedence": ["High Risk", "Risky", "Healthy", "Ambient Risk", "Niche"],
+    "narrative_state_precedence": ["High Risk", "Risky", "Healthy", "Ambient Risk", "Niche"],
+    "entity_state_precedence": ["Absent", "Off-Stage", "Leader", "Under Fire", "Supporting Player"],
+    "modifier_selection": "Once the entity_state is set, evaluate only that state's modifier block in listed order; assign the first matching modifier."
+  },
+
+
+  "topic_states": [
+    {
+      "name": "High Risk",
+      "trigger": "topic_present == true AND topic_prom >= 2.5 AND topic_sent <= -2.0",
+      "meaning": "The topic is highly negative and highly visible — presence may be a liability."
+    },
+    {
+      "name": "Risky",
+      "trigger": "topic_present == true AND topic_prom >= 2.0 AND topic_sent < 0",
+      "meaning": "The topic is visible but carries reputational friction — proceed with caution."
+    },
+    {
+      "name": "Healthy",
+      "trigger": "topic_present == true AND ((topic_prom >= 2.5) OR (topic_prom >= 2.5 AND topic_sent >= 0) OR (topic_sent >= 0 AND topic_prom >= 2.5))",
+      "meaning": "The topic is central, positive, and viable — a clear opportunity for leadership."
+    },
+    {
+      "name": "Ambient Risk",
+      "trigger": "topic_present == true AND topic_prom < 2.5 AND topic_sent < 0",
+      "meaning": "The topic isn’t dominant, but tone is negative — reputational drift may go unnoticed."
+    },
+    {
+      "name": "Niche",
+      "trigger": "topic_present == true AND topic_prom < 2.5 AND topic_sent >= 0",
+      "meaning": "The topic is present but peripheral — too marginal to anchor strategic visibility."
+    }
+  ],
+
+
+  "narrative_states": [
+    {
+      "name": "High Risk",
+      "trigger": "narrative_present == true AND narrative_prom >= 2.5 AND narrative_sent <= -2.0",
+      "meaning": "Toxic and prominent — presence may be a liability."
+    },
+    {
+      "name": "Risky",
+      "trigger": "narrative_present == true AND narrative_prom >= 2.0 AND narrative_sent < 0",
+      "meaning": "Visible but negatively framed — reputational friction."
+    },
+    {
+      "name": "Healthy",
+      "trigger": "narrative_present == true AND ((narrative_prom >= 2.5 AND narrative_sent >= 0) OR (narrative_prom >= 2.5))",
+      "meaning": "Structurally central and positively framed — strong foundation for leadership."
+    },
+    {
+      "name": "Ambient Risk",
+      "trigger": "narrative_present == true AND narrative_prom < 2.5 AND narrative_sent < 0",
+      "meaning": "Not dominant, but consistently negative — risk of unnoticed drift."
+    },
+    {
+      "name": "Niche",
+      "trigger": "narrative_present == true AND narrative_prom < 2.5 AND narrative_sent >= 0",
+      "meaning": "Present but peripheral — ambient/background visibility."
+    }
+  ],
+
+
+  "entity_states": [
+    {
+      "name": "Absent",
+      "trigger": "entity_present == false AND (narrative_present == false)",
+      "meaning": "Entity and all tracked narratives are missing; topic is on‑scope but not in a defined frame.",
+      "notes": "Use Absent only when the topic is on-scope and no tracked narrative is detected."
+    },
+    {
+      "name": "Off-Stage",
+      "trigger": "entity_present == false AND narrative_present == true",
+      "meaning": "A tracked narrative is live, but the entity is not in the story."
+    },
+    {
+      "name": "Leader",
+      "trigger": "entity_present == true AND entity_prom >= 3.0 AND entity_sent >= 0",
+      "meaning": "Highly prominent and positively framed — driving the story."
+    },
+    {
+      "name": "Under Fire",
+      "trigger": "entity_present == true AND entity_prom > 0 AND entity_sent < 0",
+      "meaning": "Present and negatively framed — reputational pressure."
+    },
+    {
+      "name": "Supporting Player",
+      "trigger": "entity_present == true AND entity_prom > 0 AND entity_prom < 3.0 AND entity_sent >= 0",
+      "meaning": "In the story but not central; mixed or underleveraged value."
+    }
+  ],
+
+
+  "absent_modifiers": {
+    "assign_when": "entity_state == 'Absent'",
+    "precedence": ["Framing Risk", "Narrative Drift", "Not Relevant"],
+    "list": [
+      {
+        "name": "Framing Risk",
+        "trigger": "topic_present == true AND topic_prom >= 2.0 AND topic_sent < 0 AND narrative_present == false",
+        "meaning": "A visible negative topic frame with no tracked narrative — absence signals rising risk."
+      },
+      {
+        "name": "Narrative Drift",
+        "trigger": "topic_present == true AND topic_prom >= 2.0 AND topic_sent > 0 AND narrative_present == false",
+        "meaning": "On‑topic but outside tracked frames — potential taxonomy gap."
+      },
+      {
+        "name": "Not Relevant",
+        "trigger": "topic_present == true AND topic_prom < 2.0 AND narrative_present == false",
+        "meaning": "Weakly framed and likely noise."
+      }
+    ]
+  },
+
+
+  "off_stage_modifiers": {
+    "assign_when": "entity_state == 'Off-Stage'",
+    "notes": "Mutually exclusive via precedence and rigid counts. Prominent tracked entity = any tracked entity with prominence >= 2.0.",
+    "precedence": [
+      "Guilt by Association",
+      "Innocent Bystander",
+      "Reporter-Led Risk",
+      "Competitor-Led",
+      "Missed Opportunity",
+      "Overlooked"
+    ],
+    "list": [
+      {
+        "name": "Guilt by Association",
+        "trigger": "narrative_prom >= 2.5 AND narrative_sent < 0 AND prominent_tracked_entities_in_article >= 2",
+        "meaning": "Systemic negativity implicates your cohort — risk extends to you even if unnamed."
+      },
+      {
+        "name": "Innocent Bystander",
+        "trigger": "narrative_prom >= 2.5 AND narrative_sent < 0 AND prominent_tracked_entities_in_article == 1",
+        "meaning": "A single rival is targeted — adjacent risk."
+      },
+      {
+        "name": "Reporter-Led Risk",
+        "trigger": "narrative_prom >= 2.5 AND narrative_sent < 0 AND prominent_tracked_entities_in_article == 0",
+        "meaning": "Central negative story driven by press with no brand anchor."
+      },
+      {
+        "name": "Competitor-Led",
+        "trigger": "narrative_prom >= 2.5 AND narrative_sent >= 0 AND prominent_tracked_entities_in_article >= 1",
+        "meaning": "A rival shapes a positive narrative while you’re absent."
+      },
+      {
+        "name": "Missed Opportunity",
+        "trigger": "narrative_prom >= 2.5 AND narrative_sent >= 0 AND prominent_tracked_entities_in_article == 0",
+        "meaning": "A central, positive frame with no leader — clear opening missed."
+      },
+      {
+        "name": "Overlooked",
+        "trigger": "narrative_prom < 2.5",
+        "meaning": "Passive invisibility — the narrative itself is not central."
+      }
+    ]
+  },
+
+
+  "supporting_player_modifiers": {
+    "assign_when": "entity_state == 'Supporting Player'",
+    "precedence": ["Strategic Signal", "Check the Box", "Low-Heat Visibility", "Background Noise"],
+    "list": [
+      {
+        "name": "Strategic Signal",
+        "trigger": "outlet_score >= 3 AND entity_sent > 2.0",
+        "meaning": "Strong praise in a quality outlet — sign of upward opportunity."
+      },
+      {
+        "name": "Check the Box",
+        "trigger": "outlet_score < 3 AND entity_sent > 2.0",
+        "meaning": "Praised but in low-tier outlet — procedural or inconsequential."
+      },
+      {
+        "name": "Low-Heat Visibility",
+        "trigger": "outlet_score >= 3 AND entity_sent >= 0.5 AND entity_sent <= 2.0",
+        "meaning": "Present in good coverage without much strategic lift."
+      },
+      {
+        "name": "Background Noise",
+        "trigger": "outlet_score < 3 AND entity_sent >= 0.5 AND entity_sent <= 2.0",
+        "meaning": "Low-value mention — safe to ignore or reposition."
+      }
+    ]
+  },
+
+
+  "under_fire_modifiers": {
+    "assign_when": "entity_state == 'Under Fire'",
+    "precedence": [
+      "High-Stakes Takedown",
+      "Body Blow",
+      "Bumps & Bruises",
+      "Stinger",
+      "Soft Target",
+      "Peripheral Hit"
+    ],
+    "list": [
+      {
+        "name": "High-Stakes Takedown",
+        "trigger": "entity_prom >= 3.0 AND entity_sent <= -2.0 AND outlet_score >= 4",
+        "meaning": "Front-and-center reputational attack in a top outlet."
+      },
+      {
+        "name": "Body Blow",
+        "trigger": "entity_prom >= 3.0 AND entity_sent <= -2.0 AND outlet_score < 4",
+        "meaning": "High prominence, sharp negativity in mid/low-tier — meaningful damage."
+      },
+      {
+        "name": "Bumps & Bruises",
+        "trigger": "entity_prom >= 2.0 AND entity_prom < 3.0 AND entity_sent <= -2.0",
+        "meaning": "Strong negative framing at moderate prominence."
+      },
+      {
+        "name": "Stinger",
+        "trigger": "entity_prom < 2.0 AND entity_sent <= -3.0",
+        "meaning": "Low prominence but extremely negative — sharp reputational sting."
+      },
+      {
+        "name": "Soft Target",
+        "trigger": "entity_prom >= 2.0 AND entity_sent > -2.0 AND entity_sent < 0",
+        "meaning": "Visible and criticized, but not sharply."
+      },
+      {
+        "name": "Peripheral Hit",
+        "trigger": "entity_prom < 2.0 AND entity_sent > -3.0 AND entity_sent < 0",
+        "meaning": "Not central, but appears in negative framing — reputational splash damage."
+      }
+    ]
+  },
+
+
+  "leader_modifiers": {
+    "assign_when": "entity_state == 'Leader'",
+    "precedence": ["Breakthrough Coverage", "Great Story", "Good Story", "Procedurally Positive"],
+    "list": [
+      {
+        "name": "Breakthrough Coverage",
+        "trigger": "entity_prom >= 4.0 AND entity_sent >= 3.0 AND outlet_score >= 4",
+        "meaning": "Standout earned win — central, overtly positive, in a top outlet."
+      },
+      {
+        "name": "Great Story",
+        "trigger": "entity_prom >= 3.0 AND entity_sent >= 2.0 AND outlet_score >= 3",
+        "meaning": "Strong strategic visibility — clearly favorable."
+      },
+      {
+        "name": "Good Story",
+        "trigger": "entity_prom >= 3.0 AND ((entity_sent >= 1.0 AND outlet_score >= 3) OR (entity_sent >= 0.0 AND outlet_score < 3))",
+        "meaning": "Useful positive presence — modest impact; contributes to momentum."
+      },
+      {
+        "name": "Procedurally Positive",
+        "trigger": "entity_prom >= 3.0 AND entity_sent >= 0.0",
+        "meaning": "Favorable but routine/low-impact — expected mentions or commodity coverage.",
+        "notes": "This is a catch-all only if higher-tier leader modifiers did not match."
+      }
+    ]
+  },
+
+
+  "undetermined": {
+    "rule": "If no state triggers for topic/narrative with topic_present/narrative_present == true, set 'Undetermined'. For entity: if entity_present == true but none of the entity state rules match, set 'Undetermined'.",
+    "action": "Flag for review; do not assign a modifier."
+  },
+
+
+  "validation": {
+    "mutual_exclusivity_checks": [
+      "Exactly one topic_state per row where topic_present == true",
+      "Exactly one narrative_state per row where narrative_present == true",
+      "Exactly one entity_state per entity-row",
+      "Exactly one modifier for the assigned entity_state (if the state is Absent, Off-Stage, Supporting Player, Under Fire, or Leader)"
+    ],
+    "data_sanity": [
+      "prominence in [0,5], sentiment in [-4,4], outlet_score in [1,5]",
+      "prominent_tracked_entities_in_article <= tracked_entities_in_article"
+    ],
+    "notes": "If Absent state is used for evaluation filters, exclude Absent rows from modifier distribution charts and downstream trend computations unless explicitly needed."
+  }
+}
