@@ -16,7 +16,7 @@ body {
   margin: 0;
   color: var(--blue-dark);
   background: #ffffff;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
 }
 
@@ -25,8 +25,8 @@ body {
 .hero { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
 .hero__brand { display: flex; align-items: center; gap: 16px; }
 .brand__logo { width: 60px; height: 60px; border-radius: 12px; object-fit: cover; }
-.brand__text .title { margin: 0; font-weight: 700; font-size: 28px; }
-.brand__text .subtitle { margin: 4px 0 0; color: var(--gray); font-size: 16px; }
+.brand__text .title { margin: 0; font-weight: 900; font-size: 32px; font-family: 'Lato', sans-serif; }
+.brand__text .subtitle { margin: 4px 0 0; color: var(--gray); font-size: 16px; font-family: 'Poppins', sans-serif; }
 
 .grid { display: grid; gap: 16px; margin: 24px 0; }
 .grid--two { grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -44,8 +44,10 @@ body {
   box-shadow: 0 1px 0 rgba(0,0,0,0.02);
 }
 
-.eyebrow { color: var(--orange); font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 8px; }
-.kicker { margin: 0 0 8px; font-size: 18px; }
+.eyebrow { color: var(--orange); font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 8px; font-family: 'Lato', sans-serif; font-weight: 700; }
+.kicker { margin: 0 0 8px; font-size: 18px; font-family: 'Lato', sans-serif; font-weight: 700; }
+.card p { font-family: 'Poppins', sans-serif; }
+.list { font-family: 'Poppins', sans-serif; }
 .list { margin: 0; padding-left: 18px; }
 
 .footer { margin-top: 40px; border-top: 1px solid #eee; padding-top: 16px; }
