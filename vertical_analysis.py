@@ -1,5 +1,4 @@
 import argparse
-import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -137,8 +136,9 @@ def is_present(prominence_value: float) -> bool:
 
 
 def normalize_sentiment_weak_collapse(raw_sentiment: float) -> float:
+    # Collapse weak sentiment to +/-1 and map true neutral (0) to +1
     if raw_sentiment == 0.0:
-        return 0.0
+        return 1.0
     if 0.01 <= raw_sentiment <= 1.0:
         return 1.0
     if -1.0 <= raw_sentiment <= -0.01:
@@ -279,16 +279,17 @@ def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -
     return ""
 
 
-def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_score: float, body_length_words: float) -> str:
+def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
     # Precedence: High-Stakes Takedown, Body Blow, Bumps & Bruises, Stinger, Soft Target, Peripheral Hit
-    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score >= 4 and body_length_words >= 1200:
+    # HST now requires outlet_score == 5 (word count bonus collapses into score)
+    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score == 5:
         return "High-Stakes Takedown"
-    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score < 4:
+    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score < 5:
         return "Body Blow"
     if 2.0 <= entity_prom < 3.0 and entity_sent <= -2.0:
         return "Bumps & Bruises"
-    # Stinger: low prominence but strongly negative (<= -2.0)
-    if entity_prom < 2.0 and entity_sent <= -2.0:
+    # Stinger (Option B adjusted): prom >= 2.0 AND sent <= -2.0 AND not Body Blow/HST (handled above)
+    if entity_prom >= 2.0 and entity_sent <= -2.0:
         return "Stinger"
     if entity_prom >= 2.0 and -2.0 < entity_sent < 0.0:
         return "Soft Target"
@@ -333,7 +334,7 @@ def assign_entity_modifier(
     if entity_state == "Supporting Player":
         return assign_supporting_player_modifier(outlet_score, entity_sent)
     if entity_state == "Under Fire":
-        return assign_under_fire_modifier(entity_prom, entity_sent, outlet_score, body_length_words)
+        return assign_under_fire_modifier(entity_prom, entity_sent, outlet_score)
     if entity_state == "Leader":
         return assign_leader_modifier(entity_prom, entity_sent, outlet_score)
     return ""
