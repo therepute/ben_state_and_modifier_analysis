@@ -1,5 +1,4 @@
 import argparse
-import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -252,18 +251,21 @@ def assign_absent_modifier(topic_present: bool, topic_prom: float, topic_sent: f
     return ""
 
 
-def assign_off_stage_modifier(narr_sent: float, other_prom_ge_2_0_count: int, any_other_prom_ge_2_5: bool) -> str:
-    # Deterministic precedence (no hard gate on central narrative prominence):
-    # 1) Guilt by Association, 2) Reporter-Led Risk, 3) Innocent Bystander, 4) Competitor-Led, 5) Overlooked
-    if narr_sent < 0.0 and other_prom_ge_2_0_count >= 2:
+def assign_off_stage_modifier(narr_prom: float, narr_sent: float, prominent_tracked_entities: int) -> str:
+    # Precedence: Guilt by Association, Innocent Bystander, Reporter-Led Risk, Competitor-Led, Missed Opportunity, Overlooked
+    if narr_prom >= 2.5 and narr_sent < 0.0 and prominent_tracked_entities >= 2:
         return "Guilt by Association"
-    if narr_sent < 0.0 and other_prom_ge_2_0_count == 0:
-        return "Reporter-Led Risk"
-    if narr_sent < 0.0 and other_prom_ge_2_0_count == 1:
+    if narr_prom >= 2.5 and narr_sent < 0.0 and prominent_tracked_entities == 1:
         return "Innocent Bystander"
-    if narr_sent >= 0.0 and any_other_prom_ge_2_5:
+    if narr_prom >= 2.5 and narr_sent < 0.0 and prominent_tracked_entities == 0:
+        return "Reporter-Led Risk"
+    if narr_prom >= 2.5 and narr_sent >= 0.0 and prominent_tracked_entities >= 1:
         return "Competitor-Led"
-    return "Overlooked"
+    if narr_prom >= 2.5 and narr_sent >= 0.0 and prominent_tracked_entities == 0:
+        return "Missed Opportunity"
+    if narr_prom < 2.5:
+        return "Overlooked"
+    return ""
 
 
 def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -> str:
@@ -279,16 +281,15 @@ def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -
     return ""
 
 
-def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_score: float, body_length_words: float) -> str:
+def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
     # Precedence: High-Stakes Takedown, Body Blow, Bumps & Bruises, Stinger, Soft Target, Peripheral Hit
-    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score >= 4 and body_length_words >= 1200:
+    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score >= 4:
         return "High-Stakes Takedown"
     if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score < 4:
         return "Body Blow"
     if 2.0 <= entity_prom < 3.0 and entity_sent <= -2.0:
         return "Bumps & Bruises"
-    # Stinger: low prominence but strongly negative (<= -2.0)
-    if entity_prom < 2.0 and entity_sent <= -2.0:
+    if entity_prom < 2.0 and entity_sent <= -3.0:
         return "Stinger"
     if entity_prom >= 2.0 and -2.0 < entity_sent < 0.0:
         return "Soft Target"
@@ -321,19 +322,18 @@ def assign_entity_modifier(
     topic_prom: float,
     topic_sent: float,
     any_narrative_present: bool,
+    central_narr_prom: float,
     central_narr_sent: float,
-    other_prom_ge_2_0_count: int,
-    any_other_prom_ge_2_5: bool,
-    body_length_words: float,
+    prominent_tracked_entities: int,
 ) -> str:
     if entity_state == "Absent":
         return assign_absent_modifier(topic_present, topic_prom, topic_sent, any_narrative_present)
     if entity_state == "Off-Stage":
-        return assign_off_stage_modifier(central_narr_sent, int(other_prom_ge_2_0_count), bool(any_other_prom_ge_2_5))
+        return assign_off_stage_modifier(central_narr_prom, central_narr_sent, prominent_tracked_entities)
     if entity_state == "Supporting Player":
         return assign_supporting_player_modifier(outlet_score, entity_sent)
     if entity_state == "Under Fire":
-        return assign_under_fire_modifier(entity_prom, entity_sent, outlet_score, body_length_words)
+        return assign_under_fire_modifier(entity_prom, entity_sent, outlet_score)
     if entity_state == "Leader":
         return assign_leader_modifier(entity_prom, entity_sent, outlet_score)
     return ""
@@ -438,29 +438,14 @@ def process(csv_path: str) -> str:
 
             outlet_score = coerce_float(row.get(OUTLET_SCORE_COL, 0.0))
             prom = coerce_float(row.get(mapping.prominence, 0.0))
-            # Supporting Player fallback: prefer raw sentiment; if NaN, fall back to normalized.
-            raw_sent_val = row.get(mapping.sentiment, None)
-            sent_val = coerce_float(raw_sent_val)
-            if pd.isna(raw_sent_val):
-                sent_val = coerce_float(row.get(sent_norm_col, 0.0))
-            sent = gated_sentiment(prom, sent_val)
+            sent = gated_sentiment(prom, coerce_float(row.get(mapping.sentiment, 0.0)))
             topic_present = bool(row.get("Topic_Present", False))
             topic_prom = coerce_float(row.get(TOPIC_PROMINENCE_COL, 0.0))
             topic_sent = gated_sentiment(topic_prom, coerce_float(row.get(TOPIC_SENTIMENT_COL, 0.0)))
             any_narr_present = bool(row.get("Any_Narrative_Present", False))
-            central_sent = coerce_float(row.get("Central_Narrative_Sentiment", 0.0))
-            # Build peer counts excluding self for Off-Stage logic
-            other_prom_ge_2_0 = 0
-            any_other_prom_ge_2_5 = False
-            for peer_name, peer_map in ENTITY_MAPPINGS.items():
-                if peer_name == entity_name:
-                    continue
-                peer_prom = coerce_float(row.get(peer_map.prominence, 0.0))
-                if peer_prom >= 2.0:
-                    other_prom_ge_2_0 += 1
-                if peer_prom >= 2.5:
-                    any_other_prom_ge_2_5 = True
-            body_len = coerce_float(row.get(BODY_LENGTH_COL, 0.0))
+            central_prom = coerce_float(row.get("Central_Narrative_Prominence", 0.0))
+            central_sent = gated_sentiment(central_prom, coerce_float(row.get("Central_Narrative_Sentiment", 0.0)))
+            prominent_cnt = int(row.get("prominent_tracked_entities_in_article", 0))
 
             return assign_entity_modifier(
                 entity_state,
@@ -471,10 +456,9 @@ def process(csv_path: str) -> str:
                 topic_prom,
                 topic_sent,
                 any_narr_present,
+                central_prom,
                 central_sent,
-                other_prom_ge_2_0,
-                any_other_prom_ge_2_5,
-                body_len,
+                prominent_cnt,
             )
 
         df[mapping.state] = df.apply(_entity_state_row, axis=1)
