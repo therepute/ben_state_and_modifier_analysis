@@ -22,7 +22,7 @@
       "narrative_present",            // boolean (for the narrative being evaluated in this row)
       "narrative_prom",               // number (0–5) for the narrative on this row
       "narrative_sent",               // number (-4..+4) for the narrative on this row
-      "entity_present",               // boolean for the evaluated entity
+      "entity_present",               // bsource .venv/bin/activateoolean for the evaluated entity
       "entity_prom",                  // number (0–5)
       "entity_sent",                  // number (-4..+4)
       "outlet_score",                 // integer 1..5
