@@ -3,6 +3,7 @@ import tempfile
 from typing import Optional
 
 from flask import Flask, Response, flash, redirect, render_template_string, request, send_file, url_for
+from uuid import uuid4
 
 import vertical_analysis
 from orchestra_signals_engine import process_signals
@@ -10,6 +11,9 @@ from orchestra_signals_engine import process_signals
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret")
+
+# In-memory download registry (token -> (path, suggested_filename))
+DOWNLOADS = {}
 
 
 INDEX_HTML = """
@@ -101,6 +105,34 @@ INDEX_HTML = """
   </html>
 """
 
+DOWNLOAD_HTML = """
+<!doctype html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Download Results</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+      .msg { font-weight: 700; margin-bottom: 12px; }
+      .note { color: #6b7280; margin-top: 8px; }
+      .btn { background: #fc5f36; color: #fff; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; text-decoration: none; }
+    </style>
+    <script>
+      window.addEventListener('DOMContentLoaded', function(){
+        const a = document.getElementById('autodl');
+        if (a) a.click();
+      });
+    </script>
+  </head>
+  <body>
+    <div class=\"msg\">{{ message }}</div>
+    <a id=\"autodl\" class=\"btn\" href=\"{{ url_for('download_token', token=token) }}\">Download CSV</a>
+    <div class=\"note\">If your download doesn't start automatically, click the button.</div>
+  </body>
+  </html>
+"""
+
 
 @app.get("/")
 def index() -> Response:
@@ -130,8 +162,12 @@ def process_pass1() -> Response:
         flash("No output produced.", "error")
         return redirect(url_for("index"))
 
-    base_name = os.path.basename(out_path)
-    return send_file(out_path, mimetype="text/csv", as_attachment=True, download_name=base_name)
+    # Prepare named download: Pass1_ prefix
+    base_in = os.path.basename(out_path)
+    suggest_name = f"Pass1_{base_in}"
+    token = uuid4().hex
+    DOWNLOADS[token] = (out_path, suggest_name)
+    return render_template_string(DOWNLOAD_HTML, message="Pass 1 Complete", token=token)
 
 
 @app.post("/process/pass2")
@@ -156,8 +192,24 @@ def process_pass2() -> Response:
         flash("No output produced.", "error")
         return redirect(url_for("index"))
 
-    base_name = os.path.basename(out_path)
-    return send_file(out_path, mimetype="text/csv", as_attachment=True, download_name=base_name)
+    base_in = os.path.basename(out_path)
+    suggest_name = f"Pass2_{base_in}"
+    token = uuid4().hex
+    DOWNLOADS[token] = (out_path, suggest_name)
+    return render_template_string(DOWNLOAD_HTML, message="Pass 2 Complete", token=token)
+
+
+@app.get("/download/<token>")
+def download_token(token: str) -> Response:
+    item = DOWNLOADS.pop(token, None)
+    if not item:
+        flash("Download expired or invalid.", "error")
+        return redirect(url_for("index"))
+    path, suggest = item
+    if not os.path.exists(path):
+        flash("File not found.", "error")
+        return redirect(url_for("index"))
+    return send_file(path, mimetype="text/csv", as_attachment=True, download_name=suggest)
 
 
 @app.get("/logo")
