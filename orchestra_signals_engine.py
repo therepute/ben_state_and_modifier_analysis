@@ -71,8 +71,10 @@ def _window_splits(
     return df_current, df_prior, (current_start, max_date), (prior_start, prior_end)
 
 
-def _mean_safe(series: pd.Series) -> float:
-    s = pd.to_numeric(series, errors="coerce")
+def _mean_safe(series) -> float:
+    # Accept Series, list, ndarray; coerce to numeric Series
+    s = pd.Series(series)
+    s = pd.to_numeric(s, errors="coerce")
     s = s.dropna()
     return float(s.mean()) if len(s) else np.nan
 

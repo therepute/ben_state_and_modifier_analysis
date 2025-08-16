@@ -81,18 +81,17 @@ INDEX_HTML = """
           {% endwith %}
         </div>
 
-        <p class=\"note\">Upload a CSV, then click Start Analysis. When processing finishes you'll see Pass 1 and Pass 2 download buttons.</p>
+        <p class=\"note\">Upload a CSV, then choose Pass 1 (states/modifiers) or Pass 2 (signals). Each downloads separately.</p>
         <div class=\"divider\"></div>
-        <form method=\"post\" action=\"{{ url_for('process_both') }}\" enctype=\"multipart/form-data\">
+        <form method=\"post\" action=\"{{ url_for('process_pass1') }}\" enctype=\"multipart/form-data\">
           <div class=\"grid\">
             <div>
               <label for=\"csv\">CSV File</label><br/>
               <input id=\"csv\" type=\"file\" name=\"file\" accept=\".csv\" required />
             </div>
           </div>
-          <div class=\"row\">
-            <button class=\"btn\" type=\"submit\">Start Analysis</button>
-          </div>
+          <div class=\"row\"><button class=\"btn\" type=\"submit\">Pass 1: Download CSV</button></div>
+          <div class=\"row\"><button class=\"btn\" type=\"submit\" formaction=\"{{ url_for('process_pass2') }}\">Pass 2: Download CSV</button></div>
         </form>
       </section>
 
@@ -136,8 +135,8 @@ def index() -> Response:
     return render_template_string(INDEX_HTML)
 
 
-@app.post("/process/both")
-def process_both() -> Response:
+@app.post("/process/pass1")
+def process_pass1() -> Response:
     uploaded = request.files.get("file")
     if not uploaded or uploaded.filename == "":
         flash("Please upload a CSV file.", "error")
@@ -160,36 +159,16 @@ def process_both() -> Response:
         flash("No output produced.", "error")
         return redirect(url_for("index"))
 
-    # Run Pass 2 (signals) using same upload
-    try:
-        out_path2 = process_signals(tmp_path)
-    except Exception as e:
-        flash(f"Signals processing failed (Pass 2): {e}", "error")
-        return redirect(url_for("index"))
-
-    if not out_path2 or not os.path.exists(out_path2):
-        flash("No signals output produced.", "error")
-        return redirect(url_for("index"))
-
-    # Register both downloads with clear names
+    # Register Pass 1 download
     token1 = uuid4().hex
-    token2 = uuid4().hex
     DOWNLOADS[token1] = (out_path1, f"Pass1_{os.path.basename(out_path1)}")
-    DOWNLOADS[token2] = (out_path2, f"Pass2_{os.path.basename(out_path2)}")
-
-    # Render a page with both buttons
     html = f"""
     <!doctype html><html><head>
-      <meta charset='utf-8'/><title>Analysis Complete</title>
-      <style>body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:2rem}}
-      .done{{font-weight:700;margin:4px 0 12px}} .row{{margin:.75rem 0}}
-      .btn{{background:#fc5f36;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none}}
-      </style>
+      <meta charset='utf-8'/><title>Pass 1 Complete</title>
+      <style>body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:2rem}} .btn{{background:#fc5f36;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none}}</style>
     </head><body>
-      <div class='done'>… Pass 1 Complete</div>
-      <div class='row'><a class='btn' href='{{{{ url_for('download_token', token="{token1}") }}}}'>Download Pass 1 CSV</a></div>
-      <div class='done'>… Pass 2 Complete</div>
-      <div class='row'><a class='btn' href='{{{{ url_for('download_token', token="{token2}") }}}}'>Download Pass 2 CSV</a></div>
+      <div>… Pass 1 Complete</div>
+      <p><a class='btn' href='{{{{ url_for('download_token', token="{token1}") }}}}'>Download Pass 1 CSV</a></p>
     </body></html>
     """
     return render_template_string(html)
