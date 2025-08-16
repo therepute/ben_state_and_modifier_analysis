@@ -279,8 +279,21 @@ def compute_narrative_signals(df: pd.DataFrame) -> pd.DataFrame:
 def _rank_and_cap_entity_signals(signals_with_meta: List[tuple]) -> List[str]:
     if not signals_with_meta:
         return []
-    df_rank = pd.DataFrame(signals_with_meta, columns=["name", "sev", "struc", "outlet", "prom", "recency"])  # type: ignore
-    df_rank = df_rank.sort_values(by=["sev", "struc", "outlet", "prom", "recency"], ascending=[False, False, False, False, False])
+    df_rank = pd.DataFrame(
+        signals_with_meta,
+        columns=["name", "sev", "struc", "outlet", "prom", "recency"],
+    )  # type: ignore
+    # Coerce to numeric to avoid mixed-type sort errors in some environments
+    for col in ("sev", "struc", "outlet", "prom", "recency"):
+        df_rank[col] = pd.to_numeric(df_rank[col], errors="coerce")
+    df_rank["name"] = df_rank["name"].astype(str)
+    # Fill NaNs with safe defaults for ranking
+    df_rank[["sev", "struc", "outlet", "prom", "recency"]] = df_rank[["sev", "struc", "outlet", "prom", "recency"]].fillna(0)
+    df_rank = df_rank.sort_values(
+        by=["sev", "struc", "outlet", "prom", "recency"],
+        ascending=[False, False, False, False, False],
+        kind="mergesort",
+    )
     return df_rank["name"].tolist()[:ENTITY_SIGNAL_CAP]
 
 
