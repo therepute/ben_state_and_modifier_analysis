@@ -12,8 +12,11 @@ from orchestra_signals_engine import process_signals
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret")
 
-# In-memory download registry (token -> (path, suggested_filename))
-DOWNLOADS = {}
+# In-memory registries (simple, volatile)
+# Uploads: upload_token -> tmp_path
+UPLOADS: dict[str, str] = {}
+# Downloads: download_token -> (file_path, suggested_filename)
+DOWNLOADS: dict[str, tuple[str, str]] = {}
 
 
 INDEX_HTML = """
@@ -81,17 +84,12 @@ INDEX_HTML = """
           {% endwith %}
         </div>
 
-        <p class=\"note\">Upload a CSV, then choose Pass 1 (states/modifiers) or Pass 2 (signals). Each downloads separately.</p>
+        <p class=\"note\">Upload a CSV, then run Pass 1 (states/modifiers) and Pass 2 (signals) as independent steps.</p>
         <div class=\"divider\"></div>
-        <form method=\"post\" action=\"{{ url_for('process_pass1') }}\" enctype=\"multipart/form-data\">
-          <div class=\"grid\">
-            <div>
-              <label for=\"csv\">CSV File</label><br/>
-              <input id=\"csv\" type=\"file\" name=\"file\" accept=\".csv\" required />
-            </div>
-          </div>
-          <div class=\"row\"><button class=\"btn\" type=\"submit\">Pass 1: Download CSV</button></div>
-          <div class=\"row\"><button class=\"btn\" type=\"submit\" formaction=\"{{ url_for('process_pass2') }}\">Pass 2: Download CSV</button></div>
+        <form method=\"post\" action=\"{{ url_for('upload') }}\" enctype=\"multipart/form-data\">
+          <label for=\"csv\">CSV File</label><br/>
+          <input id=\"csv\" type=\"file\" name=\"file\" accept=\".csv\" required />
+          <div class=\"row\"><button class=\"btn\" type=\"submit\">Upload File</button></div>
         </form>
       </section>
 
@@ -129,24 +127,82 @@ DOWNLOAD_HTML = """
   </html>
 """
 
+DASHBOARD_HTML = """
+<!doctype html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>Orchestra – Run Passes</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+      .panel { border:1px solid #eee; border-radius:12px; padding:16px; max-width:800px; }
+      .row { display:grid; grid-template-columns: 180px 1fr 180px; gap:12px; align-items:center; padding:8px 0; border-bottom:1px solid #f2f2f2; }
+      .row:last-child { border-bottom:none; }
+      .btn { background:#fc5f36; color:#fff; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; }
+      .btn[disabled] { opacity:.5; cursor:not-allowed; }
+      .status { color:#1c2d50; font-weight:600; }
+      .note { color:#6b7280; margin-bottom:8px; }
+      a.download { display:inline-block; background:#1c2d50; color:#fff; text-decoration:none; padding:8px 12px; border-radius:8px; text-align:center; }
+    </style>
+  </head>
+  <body>
+    <div class=\"panel\">
+      <div class=\"note\">Upload ready. Run each pass independently. Your upload token: <code>{{ up_token }}</code></div>
+      <form method=\"post\" action=\"{{ url_for('run_pass1') }}\">
+        <input type=\"hidden\" name=\"u\" value=\"{{ up_token }}\" />
+        <div class=\"row\">
+          <div><button class=\"btn\" type=\"submit\">Start Pass 1</button></div>
+          <div class=\"status\">{{ pass1_status }}</div>
+          <div>{% if pass1_dl_token %}<a class=\"download\" href=\"{{ url_for('download_token', token=pass1_dl_token) }}\">Download</a>{% else %}&nbsp;{% endif %}</div>
+        </div>
+      </form>
+      <form method=\"post\" action=\"{{ url_for('run_pass2') }}\">
+        <input type=\"hidden\" name=\"u\" value=\"{{ up_token }}\" />
+        <div class=\"row\">
+          <div><button class=\"btn\" type=\"submit\" {% if not pass1_complete %}disabled{% endif %}>Start Pass 2</button></div>
+          <div class=\"status\">{{ pass2_status }}</div>
+          <div>{% if pass2_dl_token %}<a class=\"download\" href=\"{{ url_for('download_token', token=pass2_dl_token) }}\">Download</a>{% else %}&nbsp;{% endif %}</div>
+        </div>
+      </form>
+    </div>
+  </body>
+  </html>
+"""
+
 
 @app.get("/")
 def index() -> Response:
     return render_template_string(INDEX_HTML)
 
 
-@app.post("/process/pass1")
-def process_pass1() -> Response:
+@app.post("/upload")
+def upload() -> Response:
     uploaded = request.files.get("file")
     if not uploaded or uploaded.filename == "":
         flash("Please upload a CSV file.", "error")
         return redirect(url_for("index"))
-
-    # Save to a temp file
-    suffix = "_input.csv"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+    with tempfile.NamedTemporaryFile(delete=False, suffix="_input.csv") as tmp:
         uploaded.save(tmp.name)
-        tmp_path = tmp.name
+        up_token = uuid4().hex
+        UPLOADS[up_token] = tmp.name
+    return render_template_string(
+        DASHBOARD_HTML,
+        up_token=up_token,
+        pass1_status="Ready",
+        pass2_status="Waiting for Pass 1",
+        pass1_complete=False,
+        pass1_dl_token="",
+        pass2_dl_token="",
+    )
+
+
+@app.post("/run/pass1")
+def run_pass1() -> Response:
+    up_token = request.form.get("u", "")
+    tmp_path = UPLOADS.get(up_token)
+    if not tmp_path:
+        flash("Upload not found. Please upload your CSV again.", "error")
+        return redirect(url_for("index"))
 
     # Pass 1 (vertical analysis)
     try:
@@ -159,48 +215,49 @@ def process_pass1() -> Response:
         flash("No output produced.", "error")
         return redirect(url_for("index"))
 
-    # Register Pass 1 download
     token1 = uuid4().hex
     DOWNLOADS[token1] = (out_path1, f"Pass1_{os.path.basename(out_path1)}")
-    html = f"""
-    <!doctype html><html><head>
-      <meta charset='utf-8'/><title>Pass 1 Complete</title>
-      <style>body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:2rem}} .btn{{background:#fc5f36;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none}}</style>
-    </head><body>
-      <div>… Pass 1 Complete</div>
-      <p><a class='btn' href='{{{{ url_for('download_token', token="{token1}") }}}}'>Download Pass 1 CSV</a></p>
-    </body></html>
-    """
-    return render_template_string(html)
+    return render_template_string(
+        DASHBOARD_HTML,
+        up_token=up_token,
+        pass1_status="Pass 1 Complete",
+        pass2_status="Ready",
+        pass1_complete=True,
+        pass1_dl_token=token1,
+        pass2_dl_token="",
+    )
 
 
-@app.post("/process/pass2")
-def process_pass2() -> Response:
-    uploaded = request.files.get("file")
-    if not uploaded or uploaded.filename == "":
-        flash("Please upload a CSV file.", "error")
+@app.post("/run/pass2")
+def run_pass2() -> Response:
+    up_token = request.form.get("u", "")
+    tmp_path = UPLOADS.get(up_token)
+    if not tmp_path:
+        flash("Upload not found. Please upload your CSV again.", "error")
         return redirect(url_for("index"))
-
-    suffix = "_input.csv"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        uploaded.save(tmp.name)
-        tmp_path = tmp.name
 
     try:
-        out_path = process_signals(tmp_path)
+        out_path2 = process_signals(tmp_path)
     except Exception as e:
-        flash(f"Processing failed: {e}", "error")
+        flash(f"Processing failed (Pass 2): {e}", "error")
         return redirect(url_for("index"))
 
-    if not out_path or not os.path.exists(out_path):
+    if not out_path2 or not os.path.exists(out_path2):
         flash("No output produced.", "error")
         return redirect(url_for("index"))
 
-    base_in = os.path.basename(out_path)
-    suggest_name = f"Pass2_{base_in}"
-    token = uuid4().hex
-    DOWNLOADS[token] = (out_path, suggest_name)
-    return render_template_string(DOWNLOAD_HTML, message="Pass 2 Complete", token=token)
+    token2 = uuid4().hex
+    DOWNLOADS[token2] = (out_path2, f"Pass2_{os.path.basename(out_path2)}")
+    # Keep pass1 button as complete only if a prior token was issued; we can't know here, so mark status generically
+    return render_template_string(
+        DASHBOARD_HTML,
+        up_token=up_token,
+        pass1_status="Pass 1 Complete",
+        pass2_status="Pass 2 Complete",
+        pass1_complete=True,
+        pass1_dl_token="",
+        pass2_dl_token=token2,
+    )
 
 
 @app.get("/download/<token>")
