@@ -2,8 +2,9 @@ import os
 import tempfile
 from typing import Optional
 
-from flask import Flask, Response, flash, redirect, render_template_string, request, send_file, url_for
+from flask import Flask, Response, flash, redirect, render_template_string, request, send_file, url_for, jsonify
 from uuid import uuid4
+import threading
 
 import vertical_analysis
 from orchestra_signals_engine import process_signals
@@ -17,6 +18,8 @@ app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret")
 UPLOADS: dict[str, str] = {}
 # Downloads: download_token -> (file_path, suggested_filename)
 DOWNLOADS: dict[str, tuple[str, str]] = {}
+# Pass2 jobs: up_token -> {status: str, dl_token: str | None, error: str | None}
+PASS2_JOBS: dict[str, dict] = {}
 
 
 INDEX_HTML = """
@@ -152,19 +155,47 @@ DASHBOARD_HTML = """
         <input type=\"hidden\" name=\"u\" value=\"{{ up_token }}\" />
         <div class=\"row\">
           <div><button class=\"btn\" type=\"submit\">Start Pass 1</button></div>
-          <div class=\"status\">{{ pass1_status }}</div>
-          <div>{% if pass1_dl_token %}<a class=\"download\" href=\"{{ url_for('download_token', token=pass1_dl_token) }}\">Download</a>{% else %}&nbsp;{% endif %}</div>
+          <div class=\"status\" id=\"pass1_status\">{{ pass1_status }}</div>
+          <div id=\"pass1_dl\">{% if pass1_dl_token %}<a class=\"download\" href=\"{{ url_for('download_token', token=pass1_dl_token) }}\">Download</a>{% else %}&nbsp;{% endif %}</div>
         </div>
       </form>
       <form method=\"post\" action=\"{{ url_for('run_pass2') }}\">
         <input type=\"hidden\" name=\"u\" value=\"{{ up_token }}\" />
         <div class=\"row\">
           <div><button class=\"btn\" type=\"submit\" {% if not pass1_complete %}disabled{% endif %}>Start Pass 2</button></div>
-          <div class=\"status\">{{ pass2_status }}</div>
-          <div>{% if pass2_dl_token %}<a class=\"download\" href=\"{{ url_for('download_token', token=pass2_dl_token) }}\">Download</a>{% else %}&nbsp;{% endif %}</div>
+          <div class=\"status\" id=\"pass2_status\">{{ pass2_status }}</div>
+          <div id=\"pass2_dl\">{% if pass2_dl_token %}<a class=\"download\" href=\"{{ url_for('download_token', token=pass2_dl_token) }}\">Download</a>{% else %}&nbsp;{% endif %}</div>
         </div>
       </form>
     </div>
+    <script>
+      (function(){
+        const statusEl = document.getElementById('pass2_status');
+        const dlEl = document.getElementById('pass2_dl');
+        const upTokenEl = document.querySelector('input[name="u"]');
+        if (!statusEl || !dlEl || !upTokenEl) return;
+        const upToken = upTokenEl.value;
+        function poll(){
+          fetch('/status/pass2?u=' + encodeURIComponent(upToken))
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(data){
+              if (!data) return;
+              if (data.status_text) statusEl.textContent = data.status_text;
+              if (data.dl_token) {
+                var href = '{{ url_for('download_token', token='__TOKEN__') }}'.replace('__TOKEN__', data.dl_token);
+                dlEl.innerHTML = '<a class="download" href="' + href + '">Download</a>';
+                return;
+              }
+              setTimeout(poll, 2000);
+            })
+            .catch(function(){ setTimeout(poll, 3000); });
+        }
+        var txt = (statusEl.textContent || '').toLowerCase();
+        if (txt.indexOf('running') !== -1 || txt.indexOf('queued') !== -1) {
+          poll();
+        }
+      })();
+    </script>
   </body>
   </html>
 """
@@ -236,28 +267,52 @@ def run_pass2() -> Response:
         flash("Upload not found. Please upload your CSV again.", "error")
         return redirect(url_for("index"))
 
-    try:
-        out_path2 = process_signals(tmp_path)
-    except Exception as e:
-        flash(f"Processing failed (Pass 2): {e}", "error")
-        return redirect(url_for("index"))
+    job = PASS2_JOBS.get(up_token)
+    if not job or job.get("status") in {"error", "done"}:
+        PASS2_JOBS[up_token] = {"status": "queued", "dl_token": None, "error": None}
 
-    if not out_path2 or not os.path.exists(out_path2):
-        flash("No output produced.", "error")
-        return redirect(url_for("index"))
+        def _run():
+            PASS2_JOBS[up_token]["status"] = "running"
+            try:
+                out_path2 = process_signals(tmp_path)
+                if not out_path2 or not os.path.exists(out_path2):
+                    raise RuntimeError("No output produced")
+                token2 = uuid4().hex
+                DOWNLOADS[token2] = (out_path2, f"Pass2_{os.path.basename(out_path2)}")
+                PASS2_JOBS[up_token]["dl_token"] = token2
+                PASS2_JOBS[up_token]["status"] = "done"
+            except Exception as e:
+                PASS2_JOBS[up_token]["status"] = "error"
+                PASS2_JOBS[up_token]["error"] = str(e)
 
-    token2 = uuid4().hex
-    DOWNLOADS[token2] = (out_path2, f"Pass2_{os.path.basename(out_path2)}")
-    # Keep pass1 button as complete only if a prior token was issued; we can't know here, so mark status generically
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+
     return render_template_string(
         DASHBOARD_HTML,
         up_token=up_token,
         pass1_status="Pass 1 Complete",
-        pass2_status="Pass 2 Complete",
+        pass2_status="Pass 2 Running…",
         pass1_complete=True,
         pass1_dl_token="",
-        pass2_dl_token=token2,
+        pass2_dl_token="",
     )
+
+
+@app.get("/status/pass2")
+def pass2_status() -> Response:
+    up_token = request.args.get("u", "")
+    job = PASS2_JOBS.get(up_token)
+    if not job:
+        return jsonify({"status": "idle", "status_text": "Ready"})
+    status = job.get("status") or "idle"
+    status_text = {
+        "queued": "Pass 2 Queued",
+        "running": "Pass 2 Running…",
+        "done": "Pass 2 Complete",
+        "error": f"Failed: {job.get('error','')}",
+    }.get(status, "Ready")
+    return jsonify({"status": status, "status_text": status_text, "dl_token": job.get("dl_token")})
 
 
 @app.get("/download/<token>")

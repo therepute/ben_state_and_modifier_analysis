@@ -53,8 +53,13 @@ ENTITY_SIGNAL_WEIGHTS = {
 # Helpers
 # ------------------------------
 def _ensure_datetime(df: pd.DataFrame, date_col: str = "Date") -> pd.DataFrame:
-    if not np.issubdtype(df[date_col].dtype, np.datetime64):
-        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    if date_col in df.columns and not np.issubdtype(df[date_col].dtype, np.datetime64):
+        # Prefer fast, fixed-format parse; fall back only if needed
+        parsed = pd.to_datetime(df[date_col], format="%Y-%m-%d", errors="coerce")
+        # If everything failed, try general parsing once
+        if parsed.isna().all():
+            parsed = pd.to_datetime(df[date_col], errors="coerce")
+        df[date_col] = parsed
     return df
 
 
@@ -505,24 +510,23 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
                     top_n = narr_sorted[0][0]
                     n_prom_col, _ = _narr_cols(top_n)
                     c_mask = (df["Date"] >= cur_win[0]) & (df["Date"] <= cur_win[1]) & (df[n_prom_col] > 0)
-                    rows_top = df.loc[c_mask]
-                    if not rows_top.empty:
-                        count_rows = len(rows_top)
-                        peers_ge3_entity_lt3 = 0
-                        entity_ge3 = 0
+                    if c_mask.any():
+                        # Vectorized computation over the windowed slice
                         peer_prom_cols = [_entity_cols(p)[0] for p in entities if p != e]
-                        for _, r2 in rows_top.iterrows():
-                            epr = float(r2.get(e_prom, 0.0) or 0.0)
-                            peer_ge3 = any((float(r2.get(pc, 0.0) or 0.0) >= 3.0) for pc in peer_prom_cols)
-                            if peer_ge3 and (epr < 3.0):
-                                peers_ge3_entity_lt3 += 1
-                            if epr >= 3.0:
-                                entity_ge3 += 1
-                        share_case = peers_ge3_entity_lt3 / count_rows
-                        share_entity_ge3 = entity_ge3 / count_rows
-                        if (share_case >= 0.60) and (share_entity_ge3 <= 0.10):
-                            sev, stru = ENTITY_SIGNAL_WEIGHTS["Framing Cage (tight)"]
-                            signals_meta.append(("Framing Cage (tight)", sev, stru, outlet, prom, recency))
+                        cols_to_use = [e_prom] + peer_prom_cols
+                        sub = df.loc[c_mask, cols_to_use].copy()
+                        # Coerce to numeric to avoid mixed-type issues
+                        for c in cols_to_use:
+                            sub[c] = pd.to_numeric(sub[c], errors="coerce").fillna(0.0)
+                        peer_ge3_any = (sub[peer_prom_cols] >= 3.0).any(axis=1) if peer_prom_cols else pd.Series(False, index=sub.index)
+                        entity_lt3 = sub[e_prom] < 3.0
+                        entity_ge3 = sub[e_prom] >= 3.0
+                        if len(sub) > 0:
+                            share_case = float((peer_ge3_any & entity_lt3).mean())
+                            share_entity_ge3 = float((entity_ge3).mean())
+                            if (share_case >= 0.60) and (share_entity_ge3 <= 0.10):
+                                sev, stru = ENTITY_SIGNAL_WEIGHTS["Framing Cage (tight)"]
+                                signals_meta.append(("Framing Cage (tight)", sev, stru, outlet, prom, recency))
 
             # Turbulent Frame (tight)
             c_mask_e = (df["Date"] >= cur_win[0]) & (df["Date"] <= cur_win[1]) & df[e_prom].notna()
