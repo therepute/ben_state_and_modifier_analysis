@@ -54,10 +54,18 @@ ENTITY_SIGNAL_WEIGHTS = {
 # ------------------------------
 def _ensure_datetime(df: pd.DataFrame, date_col: str = "Date") -> pd.DataFrame:
     if date_col in df.columns and not np.issubdtype(df[date_col].dtype, np.datetime64):
-        # Prefer fast, fixed-format parse; fall back only if needed
+        # Prefer fast, fixed-format parse; try common formats before generic fallback
         parsed = pd.to_datetime(df[date_col], format="%Y-%m-%d", errors="coerce")
-        # If everything failed, try general parsing once
+
         if parsed.isna().all():
+            for fmt in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y %H:%M:%S"):
+                alt = pd.to_datetime(df[date_col], format=fmt, errors="coerce")
+                if not alt.isna().all():
+                    parsed = alt
+                    break
+
+        if parsed.isna().all():
+            # Final fallback: generic parse (may be slower)
             parsed = pd.to_datetime(df[date_col], errors="coerce")
         df[date_col] = parsed
     return df

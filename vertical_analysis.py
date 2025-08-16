@@ -380,7 +380,7 @@ def process(csv_path: str) -> str:
 
     df["Any_Narrative_Present"] = (
         df[[NARRATIVE_MAPPINGS[k].prominence for k in NARRATIVE_TIE_PRECEDENCE]]
-        .applymap(coerce_float)
+        .apply(lambda s: s.map(coerce_float))
         .gt(0.0)
         .any(axis=1)
     )
