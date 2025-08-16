@@ -149,10 +149,11 @@ def process_both() -> Response:
         uploaded.save(tmp.name)
         tmp_path = tmp.name
 
+    # Pass 1 (vertical analysis)
     try:
         out_path1 = vertical_analysis.process(tmp_path)
     except Exception as e:
-        flash(f"Processing failed: {e}", "error")
+        flash(f"Processing failed (Pass 1): {e}", "error")
         return redirect(url_for("index"))
 
     if not out_path1 or not os.path.exists(out_path1):
@@ -163,7 +164,7 @@ def process_both() -> Response:
     try:
         out_path2 = process_signals(tmp_path)
     except Exception as e:
-        flash(f"Signals processing failed: {e}", "error")
+        flash(f"Signals processing failed (Pass 2): {e}", "error")
         return redirect(url_for("index"))
 
     if not out_path2 or not os.path.exists(out_path2):
