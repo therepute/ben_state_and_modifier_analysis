@@ -5,6 +5,7 @@ from typing import Optional
 from flask import Flask, Response, flash, redirect, render_template_string, request, send_file, url_for
 
 import vertical_analysis
+from orchestra_signals_engine import process_signals
 
 
 app = Flask(__name__)
@@ -76,9 +77,9 @@ INDEX_HTML = """
           {% endwith %}
         </div>
 
-        <p class=\"note\">Upload a CSV, then click Run to generate an enriched CSV with states, modifiers, and validation fields.</p>
+        <p class=\"note\">Upload a CSV, then choose which analysis to run and download the results.</p>
         <div class=\"divider\"></div>
-        <form method=\"post\" action=\"{{ url_for('process_upload') }}\" enctype=\"multipart/form-data\">
+        <form method=\"post\" action=\"{{ url_for('process_pass1') }}\" enctype=\"multipart/form-data\">
           <div class=\"grid\">
             <div>
               <label for=\"csv\">CSV File</label><br/>
@@ -86,7 +87,10 @@ INDEX_HTML = """
             </div>
           </div>
           <div class=\"row\">
-            <button class=\"btn\" type=\"submit\">Run Vertical Analysis</button>
+            <button class=\"btn\" type=\"submit\">Analysis Includes Pass 1 Results: Download CSV</button>
+          </div>
+          <div class=\"row\">
+            <button class=\"btn\" type=\"submit\" formaction=\"{{ url_for('process_pass2') }}\">Analysis Includes Pass 2 Results: Download CSV</button>
           </div>
         </form>
       </section>
@@ -103,8 +107,8 @@ def index() -> Response:
     return render_template_string(INDEX_HTML)
 
 
-@app.post("/process")
-def process_upload() -> Response:
+@app.post("/process/pass1")
+def process_pass1() -> Response:
     uploaded = request.files.get("file")
     if not uploaded or uploaded.filename == "":
         flash("Please upload a CSV file.", "error")
@@ -118,6 +122,32 @@ def process_upload() -> Response:
 
     try:
         out_path = vertical_analysis.process(tmp_path)
+    except Exception as e:
+        flash(f"Processing failed: {e}", "error")
+        return redirect(url_for("index"))
+
+    if not out_path or not os.path.exists(out_path):
+        flash("No output produced.", "error")
+        return redirect(url_for("index"))
+
+    base_name = os.path.basename(out_path)
+    return send_file(out_path, mimetype="text/csv", as_attachment=True, download_name=base_name)
+
+
+@app.post("/process/pass2")
+def process_pass2() -> Response:
+    uploaded = request.files.get("file")
+    if not uploaded or uploaded.filename == "":
+        flash("Please upload a CSV file.", "error")
+        return redirect(url_for("index"))
+
+    suffix = "_input.csv"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        uploaded.save(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        out_path = process_signals(tmp_path)
     except Exception as e:
         flash(f"Processing failed: {e}", "error")
         return redirect(url_for("index"))
