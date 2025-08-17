@@ -274,7 +274,14 @@ def run_pass2() -> Response:
         def _run():
             PASS2_JOBS[up_token]["status"] = "running"
             try:
-                out_path2 = process_signals(tmp_path)
+                # Prefer Pass 1 output if exists (so signals build on states/modifiers)
+                out_path1 = None
+                for token, (path, name) in list(DOWNLOADS.items()):
+                    if path.startswith(os.path.dirname(tmp_path)) and os.path.basename(path).startswith("Pass1_"):
+                        out_path1 = path
+                        break
+                source_path = out_path1 if out_path1 and os.path.exists(out_path1) else tmp_path
+                out_path2 = process_signals(source_path)
                 if not out_path2 or not os.path.exists(out_path2):
                     raise RuntimeError("No output produced")
                 token2 = uuid4().hex

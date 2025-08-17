@@ -71,6 +71,31 @@ def _ensure_datetime(df: pd.DataFrame, date_col: str = "Date") -> pd.DataFrame:
     return df
 
 
+def _normalize_headers(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize common header inconsistencies without changing semantics.
+    - Fix "Enity_" -> "Entity_"
+    - Singularize "_Modifiers" -> "_Modifier"
+    - Normalize "Quality_score" -> "Quality_Score" (case/underscore variants)
+    """
+    rename_map: dict[str, str] = {}
+    for col in list(df.columns):
+        new_col = col
+        if new_col.startswith("Enity_"):
+            new_col = "Entity_" + new_col[len("Enity_"):]
+        if new_col.endswith("_Modifiers"):
+            new_col = new_col[:-1 * len("s")]  # drop trailing 's'
+        # Normalize Quality_score variants
+        if "Quality_score" in new_col:
+            new_col = new_col.replace("Quality_score", "Quality_Score")
+        if "Quality score" in new_col:
+            new_col = new_col.replace("Quality score", "Quality_Score")
+        if new_col != col:
+            rename_map[col] = new_col
+    if rename_map:
+        df = df.rename(columns=rename_map)
+    return df
+
+
 def _window_splits(
     df: pd.DataFrame, date_col: str = "Date", as_of: pd.Timestamp | None = None
 ) -> Tuple[pd.DataFrame, pd.DataFrame, Tuple[pd.Timestamp, pd.Timestamp], Tuple[pd.Timestamp, pd.Timestamp]]:
@@ -159,13 +184,13 @@ def compute_topic_signals(df: pd.DataFrame) -> pd.DataFrame:
     share_low_tier = float((df_cur["Outlet score"].isin(LOW_TIER)).mean()) if vol_cur else 0.0
     avg_topic_prom = _mean_safe(df_cur[topic_prom]) if vol_cur else np.nan
 
-    # init column
+    # init column (dataset-level attaches as a constant per row; we still store on each row for CSV usability)
     if "Topic_Signals" not in df.columns:
         df["Topic_Signals"] = [[] for _ in range(len(df))]
     else:
         df["Topic_Signals"] = df["Topic_Signals"].apply(lambda v: v if isinstance(v, list) else ([] if pd.isna(v) else [str(v)]))
 
-    # Article-level Hot
+    # Article-level Hot retained, but other topic signals are dataset-level per window
     hot_mask = (df[topic_prom] >= 3.5) & (df[topic_sent] >= 3.0)
     if hot_mask.any():
         df.loc[hot_mask, "Topic_Signals"] = df.loc[hot_mask, "Topic_Signals"].apply(lambda s: s + ["Hot"])
@@ -183,7 +208,8 @@ def compute_topic_signals(df: pd.DataFrame) -> pd.DataFrame:
     if (not np.isnan(avg_topic_prom)) and (avg_topic_prom >= 2.5) and (share_no_narr >= 0.30) and (share_low_tier >= 0.60):
         topic_window_signals.append("Coverage Split")
     if topic_window_signals:
-        df["Topic_Signals"] = df["Topic_Signals"].apply(lambda s: s + topic_window_signals)
+        const = topic_window_signals
+        df["Topic_Signals"] = df["Topic_Signals"].apply(lambda s: s + const)
     return df
 
 
@@ -283,8 +309,12 @@ def compute_narrative_signals(df: pd.DataFrame) -> pd.DataFrame:
             if (avg_prom_prev > 0) and (avg_prom_cur >= 1.30 * avg_prom_prev):
                 narr_window_signals.append("Gaining Prominence")
 
+        # Attach dataset-level narrative status only to rows where this narrative is present (>0)
         if narr_window_signals:
-            df[outcol] = df[outcol].apply(lambda s: s + narr_window_signals)
+            present_mask = df[prom_col] > 0
+            if present_mask.any():
+                const = narr_window_signals
+                df.loc[present_mask, outcol] = df.loc[present_mask, outcol].apply(lambda s: s + const)
     return df
 
 
@@ -377,6 +407,8 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
             prom = float(row.get(e_prom, 0.0) or 0.0)
             sent = float(row.get(e_sent, 0.0) or 0.0)
             mod = str(row.get(e_mod, "")) if e_mod in df.columns else ""
+            # Presence gating: only evaluate entity-level signals when entity is present (>0)
+            entity_present = prom > 0.0
             signals_meta: List[tuple] = []
 
             # Narrative Shaping
@@ -384,8 +416,8 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
                 sev, stru = ENTITY_SIGNAL_WEIGHTS["Narrative Shaping"]
                 signals_meta.append(("Narrative Shaping", sev, stru, outlet, prom, recency))
 
-            # Wedge Potential (simple per-article check)
-            if narratives and any(v > 0 for v in row_narr_proms.values()):
+            # Wedge Potential: require entity present and same-article narrative present
+            if entity_present and narratives and any(v > 0 for v in row_narr_proms.values()):
                 for p, pv in row_peers.items():
                     if p == e:
                         continue
@@ -395,12 +427,12 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
                         break
 
             # Second Fiddle
-            if prom < 3.0 and peer_max_prom >= 3.0:
+            if entity_present and prom < 3.0 and peer_max_prom >= 3.0:
                 sev, stru = ENTITY_SIGNAL_WEIGHTS["Second Fiddle"]
                 signals_meta.append(("Second Fiddle", sev, stru, outlet, prom, recency))
 
             # Peer Pressure
-            if peer_max_sent >= 2.5 and (0.0 <= sent <= 1.0):
+            if entity_present and peer_max_sent >= 2.5 and (0.0 <= sent <= 1.0):
                 sev, stru = ENTITY_SIGNAL_WEIGHTS["Peer Pressure"]
                 signals_meta.append(("Peer Pressure", sev, stru, outlet, prom, recency))
 
@@ -408,20 +440,20 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
             for p, pv in row_peers.items():
                 if p == e:
                     continue
-                if abs(sent - pv["sent"]) >= 2.0:
+                if entity_present and abs(sent - pv["sent"]) >= 2.0:
                     sev, stru = ENTITY_SIGNAL_WEIGHTS["Contrast Framing"]
                     signals_meta.append(("Contrast Framing", sev, stru, outlet, prom, recency))
                     break
             for p, pv in row_peers.items():
                 if p == e:
                     continue
-                if (pv["sent"] - sent) >= 4.0:
+                if entity_present and (pv["sent"] - sent) >= 4.0:
                     sev, stru = ENTITY_SIGNAL_WEIGHTS["Polarized Framing"]
                     signals_meta.append(("Polarized Framing", sev, stru, outlet, prom, recency))
                     break
 
             # Ricochet Risk / Cautious Schadenfreude
-            if any(pv["mod"] in ["High-Stakes Takedown", "Body Blow", "Stinger"] for pv in row_peers.values()):
+            if entity_present and any(pv["mod"] in ["High-Stakes Takedown", "Body Blow", "Stinger"] for pv in row_peers.values()):
                 sev, stru = ENTITY_SIGNAL_WEIGHTS["Ricochet Risk"]
                 signals_meta.append(("Ricochet Risk", sev, stru, outlet, prom, recency))
                 if (prom == 0.0) or (sent >= 0.0):
@@ -429,12 +461,12 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
                     signals_meta.append(("Cautious Schadenfreude", sev, stru, outlet, prom, recency))
 
             # Captured Narrative (article)
-            if prom >= 2.5 and (peer_max_prom < 2.5):
+            if entity_present and prom >= 2.5 and (peer_max_prom < 2.5):
                 sev, stru = ENTITY_SIGNAL_WEIGHTS["Captured Narrative (article)"]
                 signals_meta.append(("Captured Narrative (article)", sev, stru, outlet, prom, recency))
 
             # Narrative Vacuum
-            if prom > 0.0 and narratives and all(v == 0.0 for v in row_narr_proms.values()):
+            if entity_present and narratives and all(v == 0.0 for v in row_narr_proms.values()):
                 sev, stru = ENTITY_SIGNAL_WEIGHTS["Narrative Vacuum"]
                 signals_meta.append(("Narrative Vacuum", sev, stru, outlet, prom, recency))
 
@@ -582,6 +614,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
 # ------------------------------
 def apply_all_signals(df: pd.DataFrame, as_of: str | None = None) -> pd.DataFrame:
     df = df.copy()
+    df = _normalize_headers(df)
     df = _ensure_datetime(df, "Date")
     # Topic
     df = compute_topic_signals(df)
