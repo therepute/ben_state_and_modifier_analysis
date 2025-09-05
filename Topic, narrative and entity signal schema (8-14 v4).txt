@@ -234,7 +234,7 @@
   "under_fire_modifiers": {
     "assign_when": "entity_state == 'Under Fire'",
     "precedence": [
-      "High-Stakes Takedown",
+      "Takedown",
       "Body Blow",
       "Bumps & Bruises",
       "Stinger",
@@ -243,7 +243,7 @@
     ],
     "list": [
       {
-        "name": "High-Stakes Takedown",
+        "name": "Takedown",
         "trigger": "entity_prom >= 3.0 AND entity_sent <= -2.0 AND outlet_score >= 4",
         "meaning": "Front-and-center reputational attack in a top outlet."
       },
@@ -278,7 +278,7 @@
 
   "leader_modifiers": {
     "assign_when": "entity_state == 'Leader'",
-    "precedence": ["Breakthrough Coverage", "Great Story", "Good Story", "Procedurally Positive"],
+    "precedence": ["Breakthrough Coverage", "Great Story", "Good Story", "Routine Positive"],
     "list": [
       {
         "name": "Breakthrough Coverage",
@@ -296,7 +296,7 @@
         "meaning": "Useful positive presence — modest impact; contributes to momentum."
       },
       {
-        "name": "Procedurally Positive",
+        "name": "Routine Positive",
         "trigger": "entity_prom >= 3.0 AND entity_sent >= 0.0",
         "meaning": "Favorable but routine/low-impact — expected mentions or commodity coverage.",
         "notes": "This is a catch-all only if higher-tier leader modifiers did not match."

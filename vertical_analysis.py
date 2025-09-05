@@ -81,10 +81,9 @@ NARRATIVE_MAPPINGS: Dict[str, NarrativeColumnMapping] = {
 }
 
 ENTITY_MAPPINGS: Dict[str, EntityColumnMapping] = {
-    # Note: The BMW prominence column is misspelled as "Enity_BMW_Prominence" in the CSV; we honor it here.
     "BMW": EntityColumnMapping(
         quality_score="Entity_BMW_Quality_Score",
-        prominence="Enity_BMW_Prominence",
+        prominence="Entity_BMW_Prominence",
         sentiment="Entity_BMW_Sentiment",
         description="Entity_BMW_Description",
         state="Entity_BMW_State",
@@ -105,7 +104,7 @@ ENTITY_MAPPINGS: Dict[str, EntityColumnMapping] = {
         sentiment="Entity_Audi_Sentiment",
         description="Entity_Audi_Description",
         state="Entity_Audi_State",
-        modifier="Entity_Audi_Modifiers",
+        modifier="Entity_Audi_Modifier",
     ),
     "Tesla": EntityColumnMapping(
         quality_score="Entity_Tesla_Quality_score",
@@ -192,7 +191,7 @@ def assign_topic_state(topic_present: bool, topic_prom: float, topic_sent: float
     # Precedence: High Risk, Risky, Healthy, Ambient Risk, Niche
     if topic_prom >= 2.5 and topic_sent <= -2.0:
         return "High Risk"
-    if topic_prom >= 2.0 and topic_sent < 0.0:
+    if topic_prom >= 2.5 and 0.0 > topic_sent >= -2.0:
         return "Risky"
     # Healthy: central and non-negative
     if topic_prom >= 2.5 and topic_sent >= 0.0:
@@ -210,7 +209,7 @@ def assign_narrative_state(narr_present: bool, narr_prom: float, narr_sent: floa
     # Precedence: High Risk, Risky, Healthy, Ambient Risk, Niche
     if narr_prom >= 2.5 and narr_sent <= -2.0:
         return "High Risk"
-    if narr_prom >= 2.0 and narr_sent < 0.0:
+    if narr_prom >= 2.5 and 0.0 > narr_sent >= -2.0:
         return "Risky"
     if narr_prom >= 2.5 and narr_sent >= 0.0:
         return "Healthy"
@@ -282,9 +281,9 @@ def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -
 
 
 def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
-    # Precedence: High-Stakes Takedown, Body Blow, Bumps & Bruises, Stinger, Soft Target, Peripheral Hit
+    # Precedence: Takedown, Body Blow, Bumps & Bruises, Stinger, Soft Target, Peripheral Hit
     if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score >= 4:
-        return "High-Stakes Takedown"
+        return "Takedown"
     if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score < 4:
         return "Body Blow"
     if 2.0 <= entity_prom < 3.0 and entity_sent <= -2.0:
@@ -299,7 +298,7 @@ def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_sc
 
 
 def assign_leader_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
-    # Precedence: Breakthrough Coverage, Great Story, Good Story, Procedurally Positive
+    # Precedence: Breakthrough Coverage, Great Story, Good Story, Routine Positive
     if entity_prom >= 4.0 and entity_sent >= 3.0 and outlet_score >= 4:
         return "Breakthrough Coverage"
     if entity_prom >= 3.0 and entity_sent >= 2.0 and outlet_score >= 3:
@@ -309,7 +308,7 @@ def assign_leader_modifier(entity_prom: float, entity_sent: float, outlet_score:
     ):
         return "Good Story"
     if entity_prom >= 3.0 and entity_sent >= 0.0:
-        return "Procedurally Positive"
+        return "Routine Positive"
     return ""
 
 
@@ -355,6 +354,18 @@ def process(csv_path: str) -> str:
         else:
             df[TOPIC_SENTIMENT_COL] = 0.0
 
+    # Handle common Topic_State column name typos
+    if TOPIC_STATE_COL not in df.columns:
+        # Check for common misspellings
+        if "Topic_Sate" in df.columns:
+            # Don't overwrite if already has states, just ensure our expected column exists
+            if df["Topic_Sate"].isna().all() or (df["Topic_Sate"].astype(str).str.strip() == "").all():
+                # Empty column, we can calculate states
+                pass
+            else:
+                # Has existing states, copy them to our expected column name
+                df[TOPIC_STATE_COL] = df["Topic_Sate"]
+
     # Derived presence and normalized sentiment for topic
     df["Topic_Present"] = df[TOPIC_PROMINENCE_COL].apply(coerce_float).apply(lambda x: is_present(x))
     df["Topic_Sentiment_Normalized"] = (
@@ -370,6 +381,12 @@ def process(csv_path: str) -> str:
 
         # Assign narrative state
         def _narr_state_row(row: pd.Series) -> str:
+            # Check if state already exists and is not empty
+            existing_state = row.get(mapping.state, "")
+            if existing_state and str(existing_state).strip() and str(existing_state) not in ["nan", "NaN", ""]:
+                return str(existing_state)
+            
+            # Calculate state if empty or missing
             prom = coerce_float(row.get(mapping.prominence, 0.0))
             sent = coerce_float(row.get(mapping.sentiment, 0.0))
             narr_present = is_present(prom)
@@ -387,6 +404,12 @@ def process(csv_path: str) -> str:
 
     # Topic state assignment (gate sentiment by presence)
     def _topic_state_row(row: pd.Series) -> str:
+        # Check if state already exists and is not empty (handles both Topic_State and Topic_Sate)
+        existing_state = row.get(TOPIC_STATE_COL, "") or row.get("Topic_Sate", "")
+        if existing_state and str(existing_state).strip() and str(existing_state) not in ["nan", "NaN", ""]:
+            return str(existing_state)
+        
+        # Calculate state if empty or missing
         prom = coerce_float(row.get(TOPIC_PROMINENCE_COL, 0.0))
         sent = coerce_float(row.get(TOPIC_SENTIMENT_COL, 0.0))
         present = is_present(prom)
@@ -424,6 +447,12 @@ def process(csv_path: str) -> str:
         df[sent_norm_col] = df[mapping.sentiment].apply(coerce_float).apply(normalize_sentiment_weak_collapse)
 
         def _entity_state_row(row: pd.Series) -> str:
+            # Check if state already exists and is not empty
+            existing_state = row.get(mapping.state, "")
+            if existing_state and str(existing_state).strip() and str(existing_state) not in ["nan", "NaN", ""]:
+                return str(existing_state)
+            
+            # Calculate state if empty or missing
             prom = coerce_float(row.get(mapping.prominence, 0.0))
             sent = coerce_float(row.get(mapping.sentiment, 0.0))
             ent_present = is_present(prom)
@@ -432,6 +461,12 @@ def process(csv_path: str) -> str:
             return assign_entity_state(ent_present, any_narr_present, prom, gated)
 
         def _entity_modifier_row(row: pd.Series) -> str:
+            # Check if modifier already exists and is not empty
+            existing_modifier = row.get(mapping.modifier, "")
+            if existing_modifier and str(existing_modifier).strip() and str(existing_modifier) not in ["nan", "NaN", ""]:
+                return str(existing_modifier)
+            
+            # Calculate modifier if empty or missing
             entity_state = row.get(mapping.state, "")
             if not entity_state:
                 entity_state = _entity_state_row(row)

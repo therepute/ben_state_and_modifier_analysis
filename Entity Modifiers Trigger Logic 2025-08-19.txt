@@ -1,0 +1,110 @@
+﻿Entity Modifiers Trigger Logic
+If State = Absent
+Each Absent-state entity is assigned one mutually exclusive modifier that describes the nature of the absence:
+Modifier
+	Trigger Logic
+	Strategic Meaning
+	Not Relevant
+	Topic_Prom < 2 AND no tracked narrative present
+	Weakly framed/low‑salience article — likely noise rather than a strategic signal.
+	Narrative Drift
+	Topic_Prom ≥ 2 AND Topic_Sent ≥ 0 AND no tracked narrative present
+	On‑topic, positive/benign coverage outside your tracked frames — likely taxonomy gap or reframing.
+	Framing Risk
+	Topic_Prom ≥ 2 AND Topic_Sent < 0 AND no tracked narrative present
+	Negative, meaningful coverage outside your frames — the story is running hot without your voice, creating reputational risk.
+	
+
+If State = Off Stage
+Each Off-Stage article receives exactly one modifier that defines the nature of the brand’s absence:
+Modifier
+	Trigger Logic
+	Strategic Meaning
+	Competitor‑Led
+	Narr_Sent ≥ 0 AND count(peers with Prom ≥ 2.0) ≥ 1
+	A rival is shaping a positive/benign story while you’re absent.
+	Missed Opportunity
+	Narr_Sent ≥ 0 AND Narr_Prom ≥ 2.5 AND count(peers with Prom ≥ 2.0) = 0
+	Central, positive story with no rival clearly leading — you should have been there.
+	Guilt by Association
+	Narr_Sent < 0 AND count(peers with Prom ≥ 2.0) ≥ 2
+	Category‑blame story: systemic negativity implicates your cohort even if you’re unnamed.
+	Innocent Bystander
+	Narr_Sent < 0 AND count(peers with Prom ≥ 2.0) = 1
+	One peer is moderately/strongly central in a negative story; you’re adjacent to the hit.
+	Reporter‑Led Risk
+	Narr_Sent < 0 AND Narr_Prom ≥ 2.5 AND count(peers with Prom ≥ 2.0) = 0
+	Central negative story driven by the press (no brand anchor) — rising reputational risk while you’re invisible.
+	Overlooked
+	Narr_Prom < 2.5 AND count(peers with Prom ≥ 2.0) = 0 (any sentiment)
+	Low‑central story with no clearly prominent peers — passive invisibility.
+	
+
+If State = Supporting Player
+Each entity in this state receives one of four mutually exclusive modifiers, based on outlet quality and sentiment:
+Modifier
+	Trigger Logic
+	Strategic Meaning
+	Strategic Signal
+	Outlet Score ≥ 3 AND Sentiment ≥ 3
+	You’re getting strong praise in a high-quality outlet. A sign of upward opportunity.
+	Low-Heat Visibility
+	Outlet Score ≥ 3 AND Sentiment between 0.5 and 3
+	You’re showing up in good coverage — but without much strategic lift.
+	Check the Box
+	Outlet Score < 3 AND Sentiment ≥ 3
+	You’re praised, but in a low-tier outlet — feels procedural or inconsequential.
+	Background Noise
+	Outlet Score < 3 AND Sentiment between 0.5 and 3
+	Low-value mentions — peripheral tone and outlet. Safe to ignore or reposition.
+	
+
+If State = Under Fire
+To make this broad category actionable, the system applies six mutually exclusive modifiers that distinguish the severity and structure of the risk:
+Modifier 
+	Trigger Logic
+	Strategic Meaning
+	Narrative Shaper
+	Entity present in headline AND Prominence ≥ 3; Sentiment ≤ –2.0; Outlet Score = 5
+	Moment likely to define how others frame the story.
+	Takedown
+	Prominence ≥ 3; Sentiment ≤ –2.0; Outlet Score = 5 (Not narrative shaper)
+	A front-and-center reputational attack in a high-impact outlet — the brand is explicitly framed as the problem.
+	Body Blow
+	Prominence ≥ 3; Sentiment ≤ –2.0; Outlet Score > 2 (Not Narrative shaper or Takedown)
+	A prominent, highly negative story in a credible regional or mid-tier outlet — painful now, with risk of being amplified.
+	Stinger
+	Prominence ≥ 2.0; Sentiment ≤ –2.0; (exclude Body Blow  and Takedown[a] by precedence)
+	A sharp, painful hit in a less influential setting — still damaging, but less likely to drive the wider conversation.
+	Light Jab
+	Prominence ≥ 2.0; Sentiment between 0 and –2.0
+	Visible and critical, but without sharp or damaging attack lines — irritation more than injury.
+	Collateral Damage
+	Prominence < 2.0; Sentiment ≤ –2.0
+	The brand is peripheral to the story but still caught in deep negativity — reputational harm by proximity.
+	Peripheral Hit
+	Prominence < 2.0; Sentiment between 0 and –2.0
+	The brand is not central, but appears in negative framing — reputational splash damage, not direct scrutiny.
+	If State = Leader
+
+
+But not all positive coverage is equal. That’s why this state uses a four-tiered modifier system to distinguish between levels of quality and strategic value:
+Narrative Setter
+	Prom ≥ 4; Sent ≥ +3; Outlet Score ≥ 4 AND entity mentions in headline
+	The best coverage you can get. A breakthrough story that other media outlets follow. 
+	Breakthrough 
+	Prom ≥ 4; Sent ≥ +3; Outlet Score ≥ 4 (not Narrative Setter)
+	A standout, high-impact win in a top-tier outlet. Defines the conversation and is difficult for competitors to match.
+	Great Story
+	Prom ≥ 3; Sent ≥ +2; Outlet Score ≥ 3; Not Breakthrough
+	A strong, strategically valuable win in credible coverage — highly positive framing with clear relevance.
+	Good Story
+	Prom ≥ 3; ((Outlet Score ≥ 3 AND Sent ≥ +1 AND Sent < +2) OR (Outlet Score < 3 AND Sent ≥ +2)); Not Great Story or Breakthrough
+	Positive coverage with strategic or reputational benefit, but limited by outlet quality or sentiment intensity. A controllable, confidence-building win.
+	Routine Positive[b]
+	Prom ≥ 3; Sent ≥ 0; Not Breakthrough, Great Story, or Good Story
+	Coverage that’s favorable but routine or low-impact. Often the result of expected mentions, procedural reporting, or commodity coverage without meaningful lift.
+	
+
+[a]Fixed to eliminate "high stakes"
+[b]Canged name
