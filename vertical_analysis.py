@@ -243,7 +243,7 @@ def assign_absent_modifier(topic_present: bool, topic_prom: float, topic_sent: f
     # Precedence: Framing Risk, Narrative Drift, Not Relevant
     if topic_present and topic_prom >= 2.0 and topic_sent < 0.0 and not any_narrative_present:
         return "Framing Risk"
-    if topic_present and topic_prom >= 2.0 and topic_sent > 0.0 and not any_narrative_present:
+    if topic_present and topic_prom >= 2.0 and topic_sent >= 0.0 and not any_narrative_present:
         return "Narrative Drift"
     if topic_present and topic_prom < 2.0 and not any_narrative_present:
         return "Not Relevant"
@@ -252,55 +252,67 @@ def assign_absent_modifier(topic_present: bool, topic_prom: float, topic_sent: f
 
 def assign_off_stage_modifier(narr_prom: float, narr_sent: float, prominent_tracked_entities: int) -> str:
     # Precedence: Guilt by Association, Innocent Bystander, Reporter-Led Risk, Competitor-Led, Missed Opportunity, Overlooked
-    if narr_prom >= 2.5 and narr_sent < 0.0 and prominent_tracked_entities >= 2:
-        return "Guilt by Association"
-    if narr_prom >= 2.5 and narr_sent < 0.0 and prominent_tracked_entities == 1:
-        return "Innocent Bystander"
-    if narr_prom >= 2.5 and narr_sent < 0.0 and prominent_tracked_entities == 0:
-        return "Reporter-Led Risk"
-    if narr_prom >= 2.5 and narr_sent >= 0.0 and prominent_tracked_entities >= 1:
-        return "Competitor-Led"
-    if narr_prom >= 2.5 and narr_sent >= 0.0 and prominent_tracked_entities == 0:
-        return "Missed Opportunity"
-    if narr_prom < 2.5:
+    
+    # First evaluate high-prominence narratives (≥ 2.5)
+    if narr_prom >= 2.5:
+        # Negative sentiment cases
+        if narr_sent < 0.0:
+            if prominent_tracked_entities >= 2:
+                return "Guilt by Association"
+            if prominent_tracked_entities == 1:
+                return "Innocent Bystander"
+            if prominent_tracked_entities == 0:
+                return "Reporter-Led Risk"
+        # Non-negative sentiment cases
+        else:  # narr_sent >= 0.0
+            if prominent_tracked_entities >= 1:
+                return "Competitor-Led"
+            if prominent_tracked_entities == 0:
+                return "Missed Opportunity"
+    
+    # Low-prominence narratives (< 2.5) - only assign Overlooked if no prominent peers
+    if narr_prom < 2.5 and prominent_tracked_entities == 0:
         return "Overlooked"
+    
     return ""
 
 
 def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -> str:
-    # Precedence: Strategic Signal, Check the Box, Low-Heat Visibility, Background Noise
-    if outlet_score >= 3 and entity_sent > 2.0:
+    # Precedence: Strategic Signal, Low-Heat Visibility, Check the Box, Background Noise
+    if outlet_score >= 3 and entity_sent >= 3.0:
         return "Strategic Signal"
-    if outlet_score < 3 and entity_sent > 2.0:
-        return "Check the Box"
-    if outlet_score >= 3 and 0.5 <= entity_sent <= 2.0:
+    if outlet_score >= 3 and 0.5 <= entity_sent < 3.0:
         return "Low-Heat Visibility"
-    if outlet_score < 3 and 0.5 <= entity_sent <= 2.0:
+    if outlet_score < 3 and entity_sent >= 3.0:
+        return "Check the Box"
+    if outlet_score < 3 and 0.5 <= entity_sent < 3.0:
         return "Background Noise"
     return ""
 
 
 def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
-    # Precedence: Takedown, Body Blow, Bumps & Bruises, Stinger, Soft Target, Peripheral Hit
+    # Precedence: Narrative Shaper, Takedown, Body Blow, Stinger, Light Jab, Collateral Damage, Peripheral Hit
+    # Note: Narrative Shaper would require headline detection - not implemented yet
     if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score >= 4:
         return "Takedown"
-    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score < 4:
+    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score > 2:
         return "Body Blow"
-    if 2.0 <= entity_prom < 3.0 and entity_sent <= -2.0:
-        return "Bumps & Bruises"
-    if entity_prom < 2.0 and entity_sent <= -3.0:
+    if entity_prom >= 2.0 and entity_sent <= -2.0:
         return "Stinger"
-    if entity_prom >= 2.0 and -2.0 < entity_sent < 0.0:
-        return "Soft Target"
-    if entity_prom < 2.0 and -3.0 < entity_sent < 0.0:
+    if entity_prom >= 2.0 and 0.0 > entity_sent > -2.0:
+        return "Light Jab"
+    if entity_prom < 2.0 and entity_sent <= -2.0:
+        return "Collateral Damage"
+    if entity_prom < 2.0 and 0.0 > entity_sent > -2.0:
         return "Peripheral Hit"
     return ""
 
 
 def assign_leader_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
-    # Precedence: Breakthrough Coverage, Great Story, Good Story, Routine Positive
+    # Precedence: Narrative Setter, Breakthrough, Great Story, Good Story, Routine Positive
+    # Note: Narrative Setter would require headline detection - not implemented yet
     if entity_prom >= 4.0 and entity_sent >= 3.0 and outlet_score >= 4:
-        return "Breakthrough Coverage"
+        return "Breakthrough"
     if entity_prom >= 3.0 and entity_sent >= 2.0 and outlet_score >= 3:
         return "Great Story"
     if entity_prom >= 3.0 and (

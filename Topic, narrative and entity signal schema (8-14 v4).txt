@@ -234,11 +234,12 @@
   "under_fire_modifiers": {
     "assign_when": "entity_state == 'Under Fire'",
     "precedence": [
+      "Narrative Shaper",
       "Takedown",
       "Body Blow",
-      "Bumps & Bruises",
       "Stinger",
-      "Soft Target",
+      "Light Jab",
+      "Collateral Damage",
       "Peripheral Hit"
     ],
     "list": [
@@ -253,24 +254,29 @@
         "meaning": "High prominence, sharp negativity in mid/low-tier — meaningful damage."
       },
       {
-        "name": "Bumps & Bruises",
-        "trigger": "entity_prom >= 2.0 AND entity_prom < 3.0 AND entity_sent <= -2.0",
-        "meaning": "Strong negative framing at moderate prominence."
+        "name": "Narrative Shaper",
+        "trigger": "entity_prom >= 4.0 AND entity_sent <= -3.0 AND outlet_score = 5 AND entity_in_headline",
+        "meaning": "Moment likely to define how others frame the story."
       },
       {
         "name": "Stinger",
-        "trigger": "entity_prom < 2.0 AND entity_sent <= -3.0",
-        "meaning": "Low prominence but extremely negative — sharp reputational sting."
+        "trigger": "entity_prom >= 2.0 AND entity_sent <= -2.0",
+        "meaning": "A sharp, painful hit in a less influential setting."
       },
       {
-        "name": "Soft Target",
+        "name": "Light Jab",
         "trigger": "entity_prom >= 2.0 AND entity_sent > -2.0 AND entity_sent < 0",
-        "meaning": "Visible and criticized, but not sharply."
+        "meaning": "Visible and critical, but without sharp or damaging attack lines."
+      },
+      {
+        "name": "Collateral Damage",
+        "trigger": "entity_prom < 2.0 AND entity_sent <= -2.0",
+        "meaning": "The brand is peripheral to the story but still caught in deep negativity."
       },
       {
         "name": "Peripheral Hit",
-        "trigger": "entity_prom < 2.0 AND entity_sent > -3.0 AND entity_sent < 0",
-        "meaning": "Not central, but appears in negative framing — reputational splash damage."
+        "trigger": "entity_prom < 2.0 AND entity_sent > -2.0 AND entity_sent < 0",
+        "meaning": "The brand is not central, but appears in negative framing."
       }
     ]
   },
@@ -278,12 +284,17 @@
 
   "leader_modifiers": {
     "assign_when": "entity_state == 'Leader'",
-    "precedence": ["Breakthrough Coverage", "Great Story", "Good Story", "Routine Positive"],
+    "precedence": ["Narrative Setter", "Breakthrough", "Great Story", "Good Story", "Routine Positive"],
     "list": [
       {
-        "name": "Breakthrough Coverage",
+        "name": "Narrative Setter",
+        "trigger": "entity_prom >= 4.0 AND entity_sent >= 3.0 AND outlet_score >= 4 AND entity_in_headline",
+        "meaning": "The best coverage you can get. A breakthrough story that other media outlets follow."
+      },
+      {
+        "name": "Breakthrough",
         "trigger": "entity_prom >= 4.0 AND entity_sent >= 3.0 AND outlet_score >= 4",
-        "meaning": "Standout earned win — central, overtly positive, in a top outlet."
+        "meaning": "A standout, high-impact win in a top-tier outlet. Defines the conversation and is difficult for competitors to match."
       },
       {
         "name": "Great Story",

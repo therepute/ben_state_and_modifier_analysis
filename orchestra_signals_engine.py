@@ -371,7 +371,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
             "avg_q_cur": _mean_safe(df.loc[cur_mask, e_q]) if e_q in df.columns else np.nan,
             "avg_q_prev": _mean_safe(df.loc[prev_mask, e_q]) if e_q in df.columns else np.nan,
             "had_HST_prev": (e_mod in df.columns) and (df.loc[prev_mask, e_mod].astype(str).eq("Takedown").any()),
-            "had_Breakthrough_prev": (e_mod in df.columns) and (df.loc[prev_mask, e_mod].astype(str).eq("Breakthrough Coverage").any()),
+            "had_Breakthrough_prev": (e_mod in df.columns) and (df.loc[prev_mask, e_mod].astype(str).eq("Breakthrough").any()),
         }
 
     # Ensure signal columns
@@ -412,7 +412,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
             signals_meta: List[tuple] = []
 
             # Narrative Shaping
-            if mod in ["Takedown", "Breakthrough Coverage"] or (prom >= 4.0 and outlet >= 4):
+            if mod in ["Takedown", "Breakthrough"] or (prom >= 4.0 and outlet >= 4):
                 sev, stru = ENTITY_SIGNAL_WEIGHTS["Narrative Shaping"]
                 signals_meta.append(("Narrative Shaping", sev, stru, outlet, prom, recency))
 
@@ -453,7 +453,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
                     break
 
             # Ricochet Risk / Cautious Schadenfreude
-            if entity_present and any(pv["mod"] in ["Takedown", "Body Blow", "Stinger"] for pv in row_peers.values()):
+            if entity_present and any(pv["mod"] in ["Narrative Shaper", "Takedown", "Body Blow", "Stinger", "Collateral Damage"] for pv in row_peers.values()):
                 sev, stru = ENTITY_SIGNAL_WEIGHTS["Ricochet Risk"]
                 signals_meta.append(("Ricochet Risk", sev, stru, outlet, prom, recency))
                 if (prom == 0.0) or (sent >= 0.0):
