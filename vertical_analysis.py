@@ -187,9 +187,9 @@ def pick_central_narrative(row: pd.Series) -> Tuple[str, float, float]:
 
 def assign_topic_state(topic_present: bool, topic_prom: float, topic_sent: float) -> str:
     if not topic_present:
-        return ""
+        return "Absent"
     # Precedence: High Risk, Risky, Healthy, Ambient Risk, Niche
-    if topic_prom >= 2.5 and topic_sent <= -2.0:
+    if topic_prom >= 2.5 and topic_sent < -2.0:
         return "High Risk"
     if topic_prom >= 2.5 and 0.0 > topic_sent >= -2.0:
         return "Risky"
@@ -205,9 +205,9 @@ def assign_topic_state(topic_present: bool, topic_prom: float, topic_sent: float
 
 def assign_narrative_state(narr_present: bool, narr_prom: float, narr_sent: float) -> str:
     if not narr_present:
-        return ""
+        return "Absent"
     # Precedence: High Risk, Risky, Healthy, Ambient Risk, Niche
-    if narr_prom >= 2.5 and narr_sent <= -2.0:
+    if narr_prom >= 2.5 and narr_sent < -2.0:
         return "High Risk"
     if narr_prom >= 2.5 and 0.0 > narr_sent >= -2.0:
         return "Risky"
@@ -401,6 +401,11 @@ def process(csv_path: str) -> str:
             # Calculate state if empty or missing
             prom = coerce_float(row.get(mapping.prominence, 0.0))
             sent = coerce_float(row.get(mapping.sentiment, 0.0))
+            
+            # Fix 2B: When prominence = 0, assign "Absent" deterministically
+            if prom == 0.0:
+                return "Absent"
+            
             narr_present = is_present(prom)
             gated_sent = gated_sentiment(prom, sent)
             return assign_narrative_state(narr_present, prom, gated_sent)
@@ -424,6 +429,11 @@ def process(csv_path: str) -> str:
         # Calculate state if empty or missing
         prom = coerce_float(row.get(TOPIC_PROMINENCE_COL, 0.0))
         sent = coerce_float(row.get(TOPIC_SENTIMENT_COL, 0.0))
+        
+        # Fix 2B: When prominence = 0, assign "Absent" deterministically
+        if prom == 0.0:
+            return "Absent"
+        
         present = is_present(prom)
         gated = gated_sentiment(prom, sent)
         return assign_topic_state(present, prom, gated)
