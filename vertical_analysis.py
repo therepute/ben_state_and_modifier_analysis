@@ -268,7 +268,6 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
                 description=actual_mappings.get("description", f"Narrative_{message}_Description" if not is_orchestra_narrative else ""),
                 prominence=actual_mappings["prominence"],
                 sentiment=actual_mappings["sentiment"],
-                quality_score=actual_mappings.get("quality_score", f"Narrative_{message}_Quality_Score" if not is_orchestra_narrative else ""),
                 state=actual_mappings.get("state", f"Narrative_{message}_State" if not is_orchestra_narrative else ""),
             )
             narrative_precedence.append(narrative_key)
