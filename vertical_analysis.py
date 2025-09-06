@@ -95,9 +95,13 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
     """
     Auto-detect companies and narratives from CSV column headers with enhanced error reporting.
     
-    Pattern Recognition:
+    Pattern Recognition - Format 1 (Current):
     - Companies: Entity_{CompanyName}_Prominence/Sentiment/Description/Quality_Score/State/Modifier
     - Narratives: Narrative_{MessageName}_Prominence/Sentiment/Description/Quality_Score/State
+    
+    Pattern Recognition - Format 2 (Orchestra Ready):
+    - Companies: {N}_{CompanyName} - Company-Level Prominence/Sentiment
+    - Narratives: O_Overall - Message {N} Prominence ({Description})/Sentiment ({Description})
     
     Returns: (entity_mappings, narrative_mappings, narrative_precedence, debug_info)
     """
@@ -112,17 +116,39 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
         "detected_entities": [],
         "detected_narratives": [],
         "missing_required": [],
-        "successful_mappings": []
+        "successful_mappings": [],
+        "format_detected": "unknown"
     }
     
-    # Pattern 1: Extract companies from Entity columns
-    entity_pattern = r'^(?:Enity_|Entity_)([^_]+)_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State|Modifier)$'
+    # Detect companies from BOTH formats simultaneously
     company_names = set()
     
+    # Format 1: Current format (Entity_Name_Field)
+    entity_pattern_format1 = r'^(?:Enity_|Entity_)([^_]+)_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State|Modifier)$'
     for col in columns:
-        match = re.match(entity_pattern, col)
+        match = re.match(entity_pattern_format1, col)
         if match:
             company_names.add(match.group(1))
+    
+    # Format 2: Orchestra ready (Number_Name - Company-Level Field)
+    entity_pattern_format2 = r'^(\d+)_([^-\s]+)\s*-\s*Company-Level\s+(?:Prominence|Sentiment)'
+    for col in columns:
+        match = re.match(entity_pattern_format2, col)
+        if match:
+            company_names.add(match.group(2))
+    
+    # Report detected formats
+    format1_count = len([col for col in columns if re.match(entity_pattern_format1, col)])
+    format2_count = len([col for col in columns if re.match(entity_pattern_format2, col)])
+    
+    if format1_count > 0 and format2_count > 0:
+        debug_info["format_detected"] = "Both formats detected"
+    elif format1_count > 0:
+        debug_info["format_detected"] = "Current format only"
+    elif format2_count > 0:
+        debug_info["format_detected"] = "Orchestra format only"
+    else:
+        debug_info["format_detected"] = "No companies detected"
     
     debug_info["detected_entities"] = sorted(list(company_names))
     
@@ -130,13 +156,13 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
     for company in sorted(company_names):
         required_fields = ["Prominence", "Sentiment"]
         optional_fields = ["Description", "Quality_Score", "State", "Modifier"]
-        
-        # Try multiple prefix patterns
-        prefix_variants = [f"Entity_{company}", f"Enity_{company}"]
         actual_mappings = {}
         
         for field in required_fields + optional_fields:
             best_match = None
+            
+            # Try Format 1: Current format
+            prefix_variants = [f"Entity_{company}", f"Enity_{company}"]
             for prefix in prefix_variants:
                 target = f"{prefix}_{field}"
                 match = find_best_column_match(target, columns)
@@ -144,33 +170,54 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
                     best_match = match
                     break
             
+            # Try Format 2: Orchestra format if not found
+            if not best_match and field in ["Prominence", "Sentiment"]:
+                company_pattern = rf'^(\d+)_{re.escape(company)}\s*-\s*Company-Level\s+{field}$'
+                for col in columns:
+                    if re.match(company_pattern, col):
+                        best_match = col
+                        break
+            
             if best_match:
                 actual_mappings[field.lower()] = best_match
             elif field in required_fields:
-                debug_info["entity_issues"].append(f"❌ {company}: Missing required field '{field}' (tried {[f'{p}_{field}' for p in prefix_variants]})")
+                tried_patterns = [f'{p}_{field}' for p in prefix_variants] + [f'N_{company} - Company-Level {field}']
+                debug_info["entity_issues"].append(f"❌ {company}: Missing required field '{field}' (tried {tried_patterns})")
         
         # Only create mapping if we have required fields
         if all(field.lower() in actual_mappings for field in required_fields):
+            # Determine if this is an Orchestra format entity
+            is_orchestra_entity = re.match(r'^\d+_', actual_mappings["prominence"]) is not None
+            
             entity_mappings[company] = EntityColumnMapping(
-                quality_score=actual_mappings.get("quality_score", f"Entity_{company}_Quality_Score"),
+                quality_score=actual_mappings.get("quality_score", f"Entity_{company}_Quality_Score" if not is_orchestra_entity else ""),
                 prominence=actual_mappings["prominence"],
                 sentiment=actual_mappings["sentiment"], 
-                description=actual_mappings.get("description", f"Entity_{company}_Description"),
-                state=actual_mappings.get("state", f"Entity_{company}_State"),
-                modifier=actual_mappings.get("modifier", f"Entity_{company}_Modifier"),
+                description=actual_mappings.get("description", f"Entity_{company}_Description" if not is_orchestra_entity else ""),
+                state=actual_mappings.get("state", f"Entity_{company}_State" if not is_orchestra_entity else ""),
+                modifier=actual_mappings.get("modifier", f"Entity_{company}_Modifier" if not is_orchestra_entity else ""),
             )
             debug_info["successful_mappings"].append(f"✅ {company}: {actual_mappings['prominence']}, {actual_mappings['sentiment']}")
         else:
             debug_info["missing_required"].append(f"Entity {company}")
     
-    # Pattern 2: Extract narratives/messages from Narrative columns
-    narrative_pattern = r'^(?:Narrtaive_|Narrative_)([^_]+)_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State)$'
+    # Pattern 2: Extract narratives/messages from BOTH formats
     message_names = set()
     
+    # Format 1: Current Narrative columns
+    narrative_pattern_format1 = r'^(?:Narrtaive_|Narrative_)([^_]+)_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State)$'
     for col in columns:
-        match = re.match(narrative_pattern, col)
+        match = re.match(narrative_pattern_format1, col)
         if match:
             message_names.add(match.group(1))
+    
+    # Format 2: Orchestra format - O_Overall - Message N Prominence/Sentiment (Description)
+    narrative_pattern_format2 = r'^O_Overall\s*-\s*Message\s+(\d+)\s+(?:Prominence|Sentiment)\s*\(([^)]+)\)$'
+    for col in columns:
+        match = re.match(narrative_pattern_format2, col)
+        if match:
+            description = match.group(2).strip()
+            message_names.add(description)  # Use exact description as narrative name
     
     debug_info["detected_narratives"] = sorted(list(message_names))
     
@@ -184,6 +231,8 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
         
         for field in required_fields + optional_fields:
             best_match = None
+            
+            # Try Format 1: Current Narrative format
             for prefix in prefix_variants:
                 target = f"{prefix}_{field}"
                 match = find_best_column_match(target, columns)
@@ -191,19 +240,36 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
                     best_match = match
                     break
             
+            # Try Format 2: Orchestra format if not found
+            if not best_match and field in ["Prominence", "Sentiment"]:
+                orchestra_pattern = rf'^O_Overall\s*-\s*Message\s+\d+\s+{field}\s*\({re.escape(message)}\)$'
+                for col in columns:
+                    if re.match(orchestra_pattern, col):
+                        best_match = col
+                        break
+            
             if best_match:
                 actual_mappings[field.lower()] = best_match
             elif field in required_fields:
-                debug_info["narrative_issues"].append(f"❌ {message}: Missing required field '{field}' (tried {[f'{p}_{field}' for p in prefix_variants]})")
+                tried_patterns = [f'{p}_{field}' for p in prefix_variants] + [f'O_Overall - Message N {field} ({message})']
+                debug_info["narrative_issues"].append(f"❌ {message}: Missing required field '{field}' (tried {tried_patterns})")
         
         # Only create mapping if we have required fields
         if all(field.lower() in actual_mappings for field in required_fields):
-            narrative_key = f"Narrative_{message}"
+            # Determine the narrative key based on which format was detected
+            is_orchestra_narrative = actual_mappings["prominence"].startswith("O_Overall")
+            
+            if is_orchestra_narrative:
+                narrative_key = message  # Use exact name for Orchestra format
+            else:
+                narrative_key = f"Narrative_{message}"  # Use prefixed name for current format
+            
             narrative_mappings[narrative_key] = NarrativeColumnMapping(
-                description=actual_mappings.get("description", f"Narrative_{message}_Description"),
+                description=actual_mappings.get("description", f"Narrative_{message}_Description" if not is_orchestra_narrative else ""),
                 prominence=actual_mappings["prominence"],
                 sentiment=actual_mappings["sentiment"],
-                state=actual_mappings.get("state", f"Narrative_{message}_State"),
+                quality_score=actual_mappings.get("quality_score", f"Narrative_{message}_Quality_Score" if not is_orchestra_narrative else ""),
+                state=actual_mappings.get("state", f"Narrative_{message}_State" if not is_orchestra_narrative else ""),
             )
             narrative_precedence.append(narrative_key)
             debug_info["successful_mappings"].append(f"✅ {message}: {actual_mappings['prominence']}, {actual_mappings['sentiment']}")
@@ -232,7 +298,8 @@ def initialize_mappings_from_csv(csv_path: str) -> str:
     preview_lines.append("📋 MAPPING PREVIEW & VALIDATION")
     preview_lines.append("=" * 60)
     
-    # Show detected entities/narratives
+    # Show format detection and entities/narratives
+    preview_lines.append(f"🔍 Format Detection: {debug_info['format_detected']}")
     preview_lines.append(f"🏢 Detected Companies: {', '.join(debug_info['detected_entities']) or 'None'}")
     preview_lines.append(f"📝 Detected Narratives: {', '.join(debug_info['detected_narratives']) or 'None'}")
     
