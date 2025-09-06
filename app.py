@@ -151,6 +151,10 @@ DASHBOARD_HTML = """
   <body>
     <div class=\"panel\">
       <div class=\"note\">Upload ready. Run each pass independently. Your upload token: <code>{{ up_token }}</code></div>
+      <div style=\"margin-bottom: 12px;\">
+        <a href=\"{{ url_for('mapping_preview') }}\" style=\"background:#1c2d50; color:#fff; text-decoration:none; padding:8px 12px; border-radius:8px; display:inline-block; font-size: 14px;\">📋 View Column Mappings</a>
+        <span style=\"color: #6b7280; font-size: 13px; margin-left: 10px;\">See detected companies and narratives from your CSV</span>
+      </div>
       <form method=\"post\" action=\"{{ url_for('run_pass1') }}\">
         <input type=\"hidden\" name=\"u\" value=\"{{ up_token }}\" />
         <div class=\"row\">
@@ -225,6 +229,62 @@ def upload() -> Response:
         pass1_dl_token="",
         pass2_dl_token="",
     )
+
+
+@app.get("/mapping_preview")
+def mapping_preview() -> Response:
+    """Show the mapping preview in a dedicated page"""
+    preview_html = vertical_analysis.get_last_mapping_preview()
+    
+    return render_template_string(f"""
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Column Mapping Preview – ReputeAI</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Lato:wght@700;900&family=Poppins:wght@400;500&display=swap" rel="stylesheet">
+        <style>
+          :root {{
+            --text: #1c2d50;       /* Dark Blue */
+            --accent: #fc5f36;     /* Dark Orange */
+            --border: #808080;     /* Medium Gray */
+            --bg: #ffffff;         /* White */
+          }}
+          * {{ box-sizing: border-box; }}
+          body {{
+            margin: 0; padding: 0; background: var(--bg); color: var(--text);
+            font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          }}
+          .bar {{ height: 6px; background: var(--accent); }}
+          .wrap {{ max-width: 980px; margin: 32px auto; padding: 0 20px; }}
+          .hero {{ display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }}
+          h1 {{ font-family: 'Lato', sans-serif; font-weight: 900; font-size: 28px; margin: 0; }}
+          .sub {{ margin: 6px 0 18px; color: #6b7280; font-size: 16px; }}
+          .card {{ border: 1px solid #eee; border-radius: 12px; padding: 18px; margin-bottom: 20px; }}
+          .btn {{ background: var(--accent); color: #fff; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; text-decoration: none; display: inline-block; }}
+          .btn:hover {{ background: #e04e2f; }}
+        </style>
+      </head>
+      <body>
+        <div class="bar"></div>
+        <div class="wrap">
+          <div class="hero">
+            <h1>Column Mapping Preview</h1>
+          </div>
+          <p class="sub">Auto-detected companies and narratives from your CSV file</p>
+          
+          <div class="card">
+            {preview_html}
+          </div>
+          
+          <a href="javascript:history.back()" class="btn">← Back to Dashboard</a>
+        </div>
+      </body>
+    </html>
+    """)
 
 
 @app.post("/run/pass1")

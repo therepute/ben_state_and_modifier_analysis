@@ -44,6 +44,9 @@ NARRATIVE_TIE_PRECEDENCE: List[str] = []
 NARRATIVE_MAPPINGS: Dict[str, NarrativeColumnMapping] = {}
 ENTITY_MAPPINGS: Dict[str, EntityColumnMapping] = {}
 
+# Store the last mapping preview for web display
+LAST_MAPPING_PREVIEW: str = ""
+
 
 def find_best_column_match(target: str, available_columns: List[str]) -> str:
     """
@@ -210,9 +213,12 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
     return entity_mappings, narrative_mappings, narrative_precedence, debug_info
 
 
-def initialize_mappings_from_csv(csv_path: str) -> None:
-    """Initialize dynamic mappings from CSV headers with detailed preview"""
-    global ENTITY_MAPPINGS, NARRATIVE_MAPPINGS, NARRATIVE_TIE_PRECEDENCE
+def initialize_mappings_from_csv(csv_path: str) -> str:
+    """Initialize dynamic mappings from CSV headers with detailed preview
+    
+    Returns: HTML-formatted preview text for web display
+    """
+    global ENTITY_MAPPINGS, NARRATIVE_MAPPINGS, NARRATIVE_TIE_PRECEDENCE, LAST_MAPPING_PREVIEW
     
     # Read just the header to get column names
     df_header = pd.read_csv(csv_path, nrows=0)
@@ -221,50 +227,78 @@ def initialize_mappings_from_csv(csv_path: str) -> None:
     # Auto-detect and populate global mappings
     ENTITY_MAPPINGS, NARRATIVE_MAPPINGS, NARRATIVE_TIE_PRECEDENCE, debug_info = auto_detect_companies_and_narratives(columns)
     
-    # Display mapping preview
-    print("\n" + "="*60)
-    print("📋 MAPPING PREVIEW & VALIDATION")
-    print("="*60)
+    # Build preview text for web display
+    preview_lines = []
+    preview_lines.append("📋 MAPPING PREVIEW & VALIDATION")
+    preview_lines.append("=" * 60)
     
     # Show detected entities/narratives
-    print(f"🏢 Detected Companies: {debug_info['detected_entities']}")
-    print(f"📝 Detected Narratives: {debug_info['detected_narratives']}")
+    preview_lines.append(f"🏢 Detected Companies: {', '.join(debug_info['detected_entities']) or 'None'}")
+    preview_lines.append(f"📝 Detected Narratives: {', '.join(debug_info['detected_narratives']) or 'None'}")
     
     # Show successful mappings
     if debug_info["successful_mappings"]:
-        print(f"\n✅ Successful Mappings ({len(debug_info['successful_mappings'])}):")
+        preview_lines.append(f"")
+        preview_lines.append(f"✅ Successful Mappings ({len(debug_info['successful_mappings'])}):")
         for mapping in debug_info["successful_mappings"]:
-            print(f"   {mapping}")
+            preview_lines.append(f"   {mapping}")
     
     # Show any issues
     all_issues = debug_info["entity_issues"] + debug_info["narrative_issues"]
     if all_issues:
-        print(f"\n⚠️  Mapping Issues ({len(all_issues)}):")
+        preview_lines.append(f"")
+        preview_lines.append(f"⚠️  Mapping Issues ({len(all_issues)}):")
         for issue in all_issues:
-            print(f"   {issue}")
+            preview_lines.append(f"   {issue}")
     
     # Show missing required entities/narratives
     if debug_info["missing_required"]:
-        print(f"\n❌ Could Not Map ({len(debug_info['missing_required'])}):")
+        preview_lines.append(f"")
+        preview_lines.append(f"❌ Could Not Map ({len(debug_info['missing_required'])}):")
         for missing in debug_info["missing_required"]:
-            print(f"   {missing} - Missing required Prominence/Sentiment columns")
+            preview_lines.append(f"   {missing} - Missing required Prominence/Sentiment columns")
     
     # Summary
-    print(f"\n📊 Final Mapping Summary:")
-    print(f"   • {len(ENTITY_MAPPINGS)} companies ready for analysis")
-    print(f"   • {len(NARRATIVE_MAPPINGS)} narratives ready for analysis")
-    print(f"   • Precedence order: {NARRATIVE_TIE_PRECEDENCE}")
+    preview_lines.append(f"")
+    preview_lines.append(f"📊 Final Mapping Summary:")
+    preview_lines.append(f"   • {len(ENTITY_MAPPINGS)} companies ready for analysis")
+    preview_lines.append(f"   • {len(NARRATIVE_MAPPINGS)} narratives ready for analysis")
+    preview_lines.append(f"   • Precedence order: {NARRATIVE_TIE_PRECEDENCE}")
     
     # Validation check
+    warnings = []
     if not ENTITY_MAPPINGS:
-        print(f"\n🚨 WARNING: No companies detected! Check column naming patterns.")
-        print(f"   Expected: Entity_{{CompanyName}}_Prominence, Entity_{{CompanyName}}_Sentiment")
+        warnings.append("🚨 WARNING: No companies detected! Check column naming patterns.")
+        warnings.append("   Expected: Entity_{CompanyName}_Prominence, Entity_{CompanyName}_Sentiment")
     
     if not NARRATIVE_MAPPINGS:
-        print(f"\n🚨 WARNING: No narratives detected! Check column naming patterns.")
-        print(f"   Expected: Narrative_{{MessageName}}_Prominence, Narrative_{{MessageName}}_Sentiment")
+        warnings.append("🚨 WARNING: No narratives detected! Check column naming patterns.")
+        warnings.append("   Expected: Narrative_{MessageName}_Prominence, Narrative_{MessageName}_Sentiment")
     
-    print("="*60 + "\n")
+    if warnings:
+        preview_lines.append("")
+        preview_lines.extend(warnings)
+    
+    preview_lines.append("=" * 60)
+    
+    # Print to console for debugging
+    console_preview = "\n".join(preview_lines)
+    print(f"\n{console_preview}\n")
+    
+    # Return HTML-formatted version for web display
+    html_preview = "<pre style='background-color: #f5f5f5; padding: 15px; border-radius: 5px; font-family: monospace; white-space: pre-wrap;'>\n"
+    html_preview += "\n".join(preview_lines)
+    html_preview += "\n</pre>"
+    
+    # Store globally for web access
+    LAST_MAPPING_PREVIEW = html_preview
+    
+    return html_preview
+
+
+def get_last_mapping_preview() -> str:
+    """Get the last mapping preview for web display"""
+    return LAST_MAPPING_PREVIEW or "<p>No mapping preview available. Upload a CSV file first.</p>"
 
 
 # -------------------------------
@@ -519,8 +553,8 @@ def assign_entity_modifier(
 # -------------------------------
 
 def process(csv_path: str) -> str:
-    # Initialize dynamic mappings first
-    initialize_mappings_from_csv(csv_path)
+    # Initialize dynamic mappings first and get preview
+    mapping_preview = initialize_mappings_from_csv(csv_path)
     
     df = pd.read_csv(csv_path, low_memory=False)
     
