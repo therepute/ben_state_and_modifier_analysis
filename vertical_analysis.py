@@ -31,88 +31,87 @@ class EntityColumnMapping:
 # Constants and configuration
 # -------------------------------
 
-TOPIC_PROMINENCE_COL = "Topic_Prominence"
-TOPIC_SENTIMENT_COL = "Topic_Sentiment"  # first Topic_Sentiment occurrence will be used
+TOPIC_PROMINENCE_COL = "O_Overall - Overall-Level Prominence"  # Need to add this column
+TOPIC_SENTIMENT_COL = "O_Overall - Overall-Level Sentiment"
 TOPIC_STATE_COL = "Topic_State"
 
-OUTLET_SCORE_COL = "Outlet score"
+OUTLET_SCORE_COL = "Orchestra_Pub_Tier"
 PUB_TIER_COL = "Pub_Tier"
 BODY_LENGTH_COL = "Body - Length - Words"
 
 NARRATIVE_TIE_PRECEDENCE: List[str] = [
-    "Narrative_Performance",
-    "Narrative_Fun",
-    "Narrative_Innovation",
-    "Narrative_Experience",
-    "Narrative_Sustainability",
+    "Narrative_BusinessMomentum",
+    "Narrative_ResponsibleGaming",
+    "Narrative_Entertainment", 
+    "Narrative_Regulatory",
+    "Narrative_IndustryGrowth",
 ]
 
 NARRATIVE_MAPPINGS: Dict[str, NarrativeColumnMapping] = {
-    "Narrative_Performance": NarrativeColumnMapping(
-        description="Narrative_Performance_Description",
-        prominence="Narrative_Performance_Prominence",
-        sentiment="Narrative_Performance_Sentiment",
-        state="Narrative_Performance_State",
+    "Narrative_BusinessMomentum": NarrativeColumnMapping(
+        description="O_Overall - Message 1 Description (Business Momentum)",
+        prominence="O_Overall - Message 1 Prominence (Business Momentum)",
+        sentiment="O_Overall - Message 1 Sentiment (Business Momentum)",
+        state="O_M_1state",
     ),
-    "Narrative_Fun": NarrativeColumnMapping(
-        description="Narrative_Fun_Description",
-        prominence="Narrative_Fun_Prominence",
-        sentiment="Narrative_Fun_Sentiment",
-        state="Narrative_Fun_State",
+    "Narrative_ResponsibleGaming": NarrativeColumnMapping(
+        description="O_Overall - Message 2 Description (Responsible Gaming, Moral Hazard & Legal Scrutiny)",
+        prominence="O_Overall - Message 2 Prominence (Responsible Gaming, Moral Hazard & Legal Scrutiny)",
+        sentiment="O_Overall - Message 2 Sentiment (Responsible Gaming, Moral Hazard & Legal Scrutiny)",
+        state="O_M_2state",
     ),
-    "Narrative_Innovation": NarrativeColumnMapping(
-        description="Narrative_Innovation_Description",
-        prominence="Narrative_Innovation_Prominence",
-        sentiment="Narrative_Innovation_Sentiment",
-        state="Narrative_Innovation_State",
+    "Narrative_Entertainment": NarrativeColumnMapping(
+        description="O_Overall - Message 3 Description (Betting enhances sports entertainment)",
+        prominence="O_Overall - Message 3 Prominence (Betting enhances sports entertainment)",
+        sentiment="O_Overall - Message 3 Sentiment (Betting enhances sports entertainment)",
+        state="O_M_3state",
     ),
-    "Narrative_Experience": NarrativeColumnMapping(
-        description="Narrative_Experience_Description",
-        prominence="Narrative_Experience_Prominence",
-        sentiment="Narrative_Experience_Sentiment",
-        state="Narrative_Experience_State",
+    "Narrative_Regulatory": NarrativeColumnMapping(
+        description="O_Overall - Message 4 Description (Regulatory and policymaker oversight)",
+        prominence="O_Overall - Message 4 Prominence (Regulatory and policymaker oversight)",
+        sentiment="O_Overall - Message 4 Sentiment (Regulatory and policymaker oversight)",
+        state="O_M_4state",
     ),
-    "Narrative_Sustainability": NarrativeColumnMapping(
-        description="Narrative_Sustainability_Description",
-        prominence="Narrative_Sustainability_Prominence",
-        sentiment="Narrative_Sustainability_Sentiment",
-        state="Narrative_Sustainability_State",
+    "Narrative_IndustryGrowth": NarrativeColumnMapping(
+        description="O_Overall - Message 5 Description (Industry growth and economic impact)",
+        prominence="O_Overall - Message 5 Prominence (Industry growth and economic impact)",
+        sentiment="O_Overall - Message 5 Sentiment (Industry growth and economic impact)",
+        state="O_M_5state",
     ),
 }
 
 ENTITY_MAPPINGS: Dict[str, EntityColumnMapping] = {
-    "BMW": EntityColumnMapping(
-        quality_score="Entity_BMW_Quality_Score",
-        prominence="Entity_BMW_Prominence",
-        sentiment="Entity_BMW_Sentiment",
-        description="Entity_BMW_Description",
-        state="Entity_BMW_State",
-        modifier="Entity_BMW_Modifier",
+    "Bet365": EntityColumnMapping(
+        quality_score="1_Orchestra_Quality_Score",
+        prominence="1_Bet365 - Company-Level Prominence",
+        sentiment="1_Bet365 - Company-Level Sentiment",
+        description="1_Bet365 - Company-Level Description",
+        state="1_C_State",
+        modifier="1_C_Modifier",
     ),
-    "Mercedes": EntityColumnMapping(
-        quality_score="Entity_Mercedes_Quality_Score",
-        prominence="Entity_Mercedes_Prominence",
-        sentiment="Entity_Mercedes_Sentiment",
-        description="Entity_Mercedes_Description",
-        state="Entity_Mercedes_State",
-        modifier="Entity_Mercedes_Modifier",
+    "FanDuel": EntityColumnMapping(
+        quality_score="2_Orchestra_Quality_Score",
+        prominence="2_FanDuel - Company-Level Prominence",
+        sentiment="2_FanDuel - Company-Level Sentiment",
+        description="2_FanDuel - Company-Level Description",
+        state="2_C_State",
+        modifier="2_C_Modifier",
     ),
-    # Audi modifier column appears pluralized in CSV
-    "Audi": EntityColumnMapping(
-        quality_score="Entity_Audi_Quality_score",
-        prominence="Entity_Audi_Prominence",
-        sentiment="Entity_Audi_Sentiment",
-        description="Entity_Audi_Description",
-        state="Entity_Audi_State",
-        modifier="Entity_Audi_Modifier",
+    "DraftKings": EntityColumnMapping(
+        quality_score="3_Orchestra_Quality_Score",
+        prominence="3_DraftKings - Company-Level Prominence",
+        sentiment="3_DraftKings - Company-Level Sentiment",
+        description="3_DraftKings - Company-Level Description",
+        state="3_C_State",
+        modifier="3_C_Modifier",
     ),
-    "Tesla": EntityColumnMapping(
-        quality_score="Entity_Tesla_Quality_score",
-        prominence="Entity_Tesla_Prominence",
-        sentiment="Entity_Tesla_Sentiment",
-        description="Entity_Tesla_Description",
-        state="Entity_Tesla_State",
-        modifier="Entity_Tesla_Modifier",
+    "BetMGM": EntityColumnMapping(
+        quality_score="4_Orchestra_Quality_Score",
+        prominence="4_BetMGM - Company-Level Prominence",
+        sentiment="4_BetMGM - Company-Level Sentiment",
+        description="4_BetMGM - Company-Level Description",
+        state="4_C_State",
+        modifier="4_C_Modifier",
     ),
 }
 
@@ -356,6 +355,54 @@ def assign_entity_modifier(
 
 def process(csv_path: str) -> str:
     df = pd.read_csv(csv_path, low_memory=False)
+    
+    # Check for required columns and provide detailed error message
+    missing_cols = []
+    
+    # Check required topic columns - create Topic Prominence if missing
+    if TOPIC_PROMINENCE_COL not in df.columns:
+        # Create Topic Prominence as max of all message prominences
+        message_prom_cols = [
+            "O_Overall - Message 1 Prominence (Business Momentum)",
+            "O_Overall - Message 2 Prominence (Responsible Gaming, Moral Hazard & Legal Scrutiny)",
+            "O_Overall - Message 3 Prominence (Betting enhances sports entertainment)",
+            "O_Overall - Message 4 Prominence (Regulatory and policymaker oversight)",
+            "O_Overall - Message 5 Prominence (Industry growth and economic impact)"
+        ]
+        available_prom_cols = [col for col in message_prom_cols if col in df.columns]
+        if available_prom_cols:
+            df[TOPIC_PROMINENCE_COL] = df[available_prom_cols].apply(lambda row: row.max(), axis=1)
+        else:
+            missing_cols.append(TOPIC_PROMINENCE_COL)
+    
+    # Check for topic sentiment (can have variations)
+    topic_sent_cols = [c for c in df.columns if c.startswith("Topic_Sentiment")]
+    if TOPIC_SENTIMENT_COL not in df.columns and not topic_sent_cols:
+        missing_cols.append(TOPIC_SENTIMENT_COL)
+    
+    # Check required narrative columns
+    for key, mapping in NARRATIVE_MAPPINGS.items():
+        if mapping.prominence not in df.columns:
+            missing_cols.append(mapping.prominence)
+        if mapping.sentiment not in df.columns:
+            missing_cols.append(mapping.sentiment)
+    
+    # Check required entity columns
+    for entity_name, mapping in ENTITY_MAPPINGS.items():
+        if mapping.prominence not in df.columns:
+            missing_cols.append(mapping.prominence)
+        if mapping.sentiment not in df.columns:
+            missing_cols.append(mapping.sentiment)
+    
+    # Check required metadata columns
+    required_meta_cols = [OUTLET_SCORE_COL, PUB_TIER_COL, BODY_LENGTH_COL]
+    for col in required_meta_cols:
+        if col not in df.columns:
+            missing_cols.append(col)
+    
+    if missing_cols:
+        available_cols = sorted(df.columns.tolist())
+        raise ValueError(f"Missing required columns: {missing_cols}\n\nAvailable columns in your CSV: {available_cols}\n\nPlease ensure your CSV has all required columns for analysis.")
 
     # Use the first Topic_Sentiment column if duplicated
     if TOPIC_SENTIMENT_COL not in df.columns:
