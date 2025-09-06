@@ -471,8 +471,12 @@ def assign_off_stage_modifier(narr_prom: float, narr_sent: float, prominent_trac
     if narr_prom < 2.5 and prominent_tracked_entities == 0:
         return "Overlooked"
     
-    # This should never happen with deterministic logic, but safety fallback
-    return "Overlooked"
+    # Edge case fallback: if we somehow miss the above cases, default to appropriate modifier
+    # This shouldn't happen with proper deterministic logic
+    if narr_sent >= 0.0:
+        return "Missed Opportunity"  # Non-negative fallback
+    else:
+        return "Reporter-Led Risk"   # Negative fallback
 
 
 def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -> str:
@@ -489,20 +493,36 @@ def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -
 
 
 def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
-    # Precedence: Narrative Shaper, Takedown, Body Blow, Stinger, Light Jab, Collateral Damage, Peripheral Hit
-    # Note: Narrative Shaper would require headline detection - not implemented yet
-    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score >= 4:
+    # Precedence per Ben's audit: Narrative Shaper (Tier-1) > Takedown (Tier-4) > Body Blow (mid-tier)
+    
+    # Narrative Shaper: Tier-1 (outlet score = 5), prom ≥ 4, sent ≤ -3
+    if outlet_score == 5 and entity_prom >= 4.0 and entity_sent <= -3.0:
+        return "Narrative Shaper"
+    
+    # Takedown: Tier-4 (outlet score = 4), prom ≥ 4, sent ≤ -3  
+    if outlet_score == 4 and entity_prom >= 4.0 and entity_sent <= -3.0:
         return "Takedown"
-    if entity_prom >= 3.0 and entity_sent <= -2.0 and outlet_score > 2:
+    
+    # Body Blow: mid-tier (outlet score > 2 but not 4 or 5), prom ≥ 3, sent ≤ -2
+    if outlet_score > 2 and outlet_score not in [4, 5] and entity_prom >= 3.0 and entity_sent <= -2.0:
         return "Body Blow"
+    
+    # Stinger: any tier, prom ≥ 2, sent ≤ -2 (but lower precedence than above)
     if entity_prom >= 2.0 and entity_sent <= -2.0:
         return "Stinger"
+    
+    # Light Jab: prom ≥ 2, -2 < sent < 0
     if entity_prom >= 2.0 and 0.0 > entity_sent > -2.0:
         return "Light Jab"
+    
+    # Collateral Damage: prom < 2, sent ≤ -2
     if entity_prom < 2.0 and entity_sent <= -2.0:
         return "Collateral Damage"
+    
+    # Peripheral Hit: prom < 2, -2 < sent < 0
     if entity_prom < 2.0 and 0.0 > entity_sent > -2.0:
         return "Peripheral Hit"
+    
     return ""
 
 
@@ -705,12 +725,7 @@ def process(csv_path: str) -> str:
             return assign_entity_state(ent_present, any_narr_present, prom, gated)
 
         def _entity_modifier_row(row: pd.Series) -> str:
-            # Check if modifier already exists and is not empty
-            existing_modifier = row.get(mapping.modifier, "")
-            if existing_modifier and str(existing_modifier).strip() and str(existing_modifier) not in ["nan", "NaN", ""]:
-                return str(existing_modifier)
-            
-            # Calculate modifier if empty or missing
+            # Always recalculate modifiers (per Ben's audit - don't preserve existing values)
             entity_state = row.get(mapping.state, "")
             if not entity_state:
                 entity_state = _entity_state_row(row)
