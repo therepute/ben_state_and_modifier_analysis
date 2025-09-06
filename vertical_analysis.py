@@ -640,14 +640,34 @@ def process(csv_path: str) -> str:
     # Check for required columns and provide detailed error message
     missing_cols = []
     
-    # Check required topic columns
-    if TOPIC_PROMINENCE_COL not in df.columns:
-        missing_cols.append(TOPIC_PROMINENCE_COL)
+    # Check required topic columns - try both formats
+    global TOPIC_PROMINENCE_COL, TOPIC_SENTIMENT_COL, OUTLET_SCORE_COL
     
-    # Check for topic sentiment (can have variations)
+    topic_prominence_col = None
+    if TOPIC_PROMINENCE_COL in df.columns:
+        topic_prominence_col = TOPIC_PROMINENCE_COL
+    elif "O_Overall - Overall-Level Prominence" in df.columns:
+        topic_prominence_col = "O_Overall - Overall-Level Prominence"
+    
+    if not topic_prominence_col:
+        missing_cols.append("Topic_Prominence (or O_Overall - Overall-Level Prominence)")
+    else:
+        TOPIC_PROMINENCE_COL = topic_prominence_col
+    
+    # Check for topic sentiment (can have variations) - try both formats
+    topic_sentiment_col = None
     topic_sent_cols = [c for c in df.columns if c.startswith("Topic_Sentiment")]
-    if TOPIC_SENTIMENT_COL not in df.columns and not topic_sent_cols:
-        missing_cols.append(TOPIC_SENTIMENT_COL)
+    if TOPIC_SENTIMENT_COL in df.columns:
+        topic_sentiment_col = TOPIC_SENTIMENT_COL
+    elif topic_sent_cols:
+        topic_sentiment_col = topic_sent_cols[0]  # Use first match
+    elif "O_Overall - Overall-Level Sentiment" in df.columns:
+        topic_sentiment_col = "O_Overall - Overall-Level Sentiment"
+    
+    if not topic_sentiment_col:
+        missing_cols.append("Topic_Sentiment (or O_Overall - Overall-Level Sentiment)")
+    else:
+        TOPIC_SENTIMENT_COL = topic_sentiment_col
     
     # Check required narrative columns
     for key, mapping in NARRATIVE_MAPPINGS.items():
@@ -663,9 +683,21 @@ def process(csv_path: str) -> str:
         if mapping.sentiment not in df.columns:
             missing_cols.append(mapping.sentiment)
     
-    # Check required metadata columns
-    required_meta_cols = [OUTLET_SCORE_COL, PUB_TIER_COL, BODY_LENGTH_COL]
-    for col in required_meta_cols:
+    # Check required metadata columns - try both formats
+    outlet_score_col = None
+    if OUTLET_SCORE_COL in df.columns:
+        outlet_score_col = OUTLET_SCORE_COL
+    elif "Orchestra_Pub_Tier" in df.columns:
+        outlet_score_col = "Orchestra_Pub_Tier"
+    
+    if not outlet_score_col:
+        missing_cols.append("Outlet score (or Orchestra_Pub_Tier)")
+    else:
+        OUTLET_SCORE_COL = outlet_score_col
+    
+    # Check other required metadata columns
+    other_meta_cols = [PUB_TIER_COL, BODY_LENGTH_COL]
+    for col in other_meta_cols:
         if col not in df.columns:
             missing_cols.append(col)
     
