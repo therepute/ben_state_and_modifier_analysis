@@ -694,7 +694,7 @@ def process(csv_path: str) -> str:
         for ent_key, ent_map in ENTITY_MAPPINGS.items():
             prom_val = coerce_float(row.get(ent_map.prominence, 0.0))
             presences.append(prom_val > 0.0)
-            prominent_flags.append(prom_val >= 2.0)
+            prominent_flags.append(prom_val >= 2.5)  # Fixed: Use canonical 2.5 threshold for "prominent"
         return sum(presences), sum(prominent_flags)
 
     counts = df.apply(_entity_presence_counts, axis=1, result_type="expand")
