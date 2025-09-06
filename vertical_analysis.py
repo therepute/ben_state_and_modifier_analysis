@@ -461,11 +461,11 @@ def assign_off_stage_modifier(narr_prom: float, narr_sent: float, prominent_trac
     else:
         # Negative sentiment cases (narr_sent < 0.0)
         if prominent_tracked_entities >= 2:
-            return "Guilt by Association"
+        return "Guilt by Association"
         if prominent_tracked_entities == 1:
-            return "Innocent Bystander"
+        return "Innocent Bystander"
         if narr_prom >= 2.5 and prominent_tracked_entities == 0:
-            return "Reporter-Led Risk"
+        return "Reporter-Led Risk"
     
     # Final fallback: only if (Narr_Prom < 2.5 & peers = 0)
     if narr_prom < 2.5 and prominent_tracked_entities == 0:
@@ -738,7 +738,7 @@ def process(csv_path: str) -> str:
             topic_sent = gated_sentiment(topic_prom, coerce_float(row.get(TOPIC_SENTIMENT_COL, 0.0)))
             any_narr_present = bool(row.get("Any_Narrative_Present", False))
             central_prom = coerce_float(row.get("Central_Narrative_Prominence", 0.0))
-            central_sent = coerce_float(row.get("Central_Narrative_Sentiment", 0.0))  # Don't gate for Off-Stage logic
+            central_sent = gated_sentiment(central_prom, coerce_float(row.get("Central_Narrative_Sentiment", 0.0)))
             prominent_cnt = int(row.get("prominent_tracked_entities_in_article", 0))
 
             return assign_entity_modifier(
