@@ -190,12 +190,12 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
             is_orchestra_entity = re.match(r'^\d+_', actual_mappings["prominence"]) is not None
             
             entity_mappings[company] = EntityColumnMapping(
-                quality_score=actual_mappings.get("quality_score", f"Entity_{company}_Quality_Score" if not is_orchestra_entity else ""),
+                quality_score=actual_mappings.get("quality_score", f"Entity_{company}_Quality_Score"),
                 prominence=actual_mappings["prominence"],
                 sentiment=actual_mappings["sentiment"], 
-                description=actual_mappings.get("description", f"Entity_{company}_Description" if not is_orchestra_entity else ""),
-                state=actual_mappings.get("state", f"Entity_{company}_State" if not is_orchestra_entity else ""),
-                modifier=actual_mappings.get("modifier", f"Entity_{company}_Modifier" if not is_orchestra_entity else ""),
+                description=actual_mappings.get("description", f"Entity_{company}_Description"),
+                state=actual_mappings.get("state", f"Entity_{company}_State"),
+                modifier=actual_mappings.get("modifier", f"Entity_{company}_Modifier"),
             )
             debug_info["successful_mappings"].append(f"✅ {company}: {actual_mappings['prominence']}, {actual_mappings['sentiment']}")
         else:
@@ -552,21 +552,22 @@ def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -
 
 
 def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
-    # Precedence per Ben's audit: Narrative Shaper (Tier-1) > Takedown (Tier-4) > Body Blow (mid-tier)
+    # Corrected per Ben's feedback: Narrative Shaper (no headline), Takedown (outlet=4)
+    # Canonical precedence: Narrative Shaper > Takedown > Body Blow > Stinger > Light Jab > Collateral/Peripheral
     
-    # Narrative Shaper: Tier-1 (outlet score = 5), prom ≥ 4, sent ≤ -3
-    if outlet_score == 5 and entity_prom >= 4.0 and entity_sent <= -3.0:
+    # Narrative Shaper: Outlet = 5, prom ≥ 3, sent ≤ -2.0 (no headline requirement per Ben)
+    if outlet_score == 5 and entity_prom >= 3.0 and entity_sent <= -2.0:
         return "Narrative Shaper"
     
-    # Takedown: Tier-4 (outlet score = 4), prom ≥ 4, sent ≤ -3  
-    if outlet_score == 4 and entity_prom >= 4.0 and entity_sent <= -3.0:
+    # Takedown: Outlet = 4, prom ≥ 3, sent ≤ -2.0 (Ben specified outlet=4, not 5)
+    if outlet_score == 4 and entity_prom >= 3.0 and entity_sent <= -2.0:
         return "Takedown"
     
-    # Body Blow: mid-tier (outlet score > 2 but not 4 or 5), prom ≥ 3, sent ≤ -2
+    # Body Blow: Outlet > 2 (but not 4 or 5), prom ≥ 3, sent ≤ -2.0
     if outlet_score > 2 and outlet_score not in [4, 5] and entity_prom >= 3.0 and entity_sent <= -2.0:
         return "Body Blow"
     
-    # Stinger: any tier, prom ≥ 2, sent ≤ -2 (but lower precedence than above)
+    # Stinger: prom ≥ 2, sent ≤ -2.0 (any outlet, but lower precedence than above)
     if entity_prom >= 2.0 and entity_sent <= -2.0:
         return "Stinger"
     
@@ -588,16 +589,26 @@ def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_sc
 def assign_leader_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
     # Precedence: Narrative Setter, Breakthrough, Great Story, Good Story, Routine Positive
     # Note: Narrative Setter would require headline detection - not implemented yet
+    
+    # Breakthrough: Prom ≥ 4; Sent ≥ +3; Outlet ≥ 4 (not Narrative Setter)
     if entity_prom >= 4.0 and entity_sent >= 3.0 and outlet_score >= 4:
         return "Breakthrough"
+    
+    # Great Story: Prom ≥ 3; Sent ≥ +2; Outlet ≥ 3; Not Breakthrough
     if entity_prom >= 3.0 and entity_sent >= 2.0 and outlet_score >= 3:
         return "Great Story"
+    
+    # Good Story: Prom ≥ 3; ((Outlet ≥ 3 AND Sent ≥ +1 AND Sent < +2) OR (Outlet < 3 AND Sent ≥ +2))
     if entity_prom >= 3.0 and (
-        (entity_sent >= 1.0 and outlet_score >= 3) or (entity_sent >= 0.0 and outlet_score < 3)
+        (outlet_score >= 3 and entity_sent >= 1.0 and entity_sent < 2.0) or 
+        (outlet_score < 3 and entity_sent >= 2.0)
     ):
         return "Good Story"
+    
+    # Routine Positive: Prom ≥ 3; Sent ≥ 0; Not others
     if entity_prom >= 3.0 and entity_sent >= 0.0:
         return "Routine Positive"
+    
     return ""
 
 
@@ -817,9 +828,8 @@ def process(csv_path: str) -> str:
 
         def _entity_modifier_row(row: pd.Series) -> str:
             # Always recalculate modifiers (per Ben's audit - don't preserve existing values)
-            entity_state = row.get(mapping.state, "")
-            if not entity_state:
-                entity_state = _entity_state_row(row)
+            # Force recalculation of entity state - ignore contaminated input CSV values
+            entity_state = _entity_state_row(row)
 
             outlet_score = coerce_float(row.get(OUTLET_SCORE_COL, 0.0))
             prom = coerce_float(row.get(mapping.prominence, 0.0))
