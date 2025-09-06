@@ -738,7 +738,7 @@ def process(csv_path: str) -> str:
             topic_sent = gated_sentiment(topic_prom, coerce_float(row.get(TOPIC_SENTIMENT_COL, 0.0)))
             any_narr_present = bool(row.get("Any_Narrative_Present", False))
             central_prom = coerce_float(row.get("Central_Narrative_Prominence", 0.0))
-            central_sent = gated_sentiment(central_prom, coerce_float(row.get("Central_Narrative_Sentiment", 0.0)))
+            central_sent = coerce_float(row.get("Central_Narrative_Sentiment", 0.0))  # Don't gate for Off-Stage logic
             prominent_cnt = int(row.get("prominent_tracked_entities_in_article", 0))
 
             return assign_entity_modifier(
