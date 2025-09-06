@@ -31,87 +31,87 @@ class EntityColumnMapping:
 # Constants and configuration
 # -------------------------------
 
-TOPIC_PROMINENCE_COL = "O_Overall - Overall-Level Prominence"  # Need to add this column
-TOPIC_SENTIMENT_COL = "O_Overall - Overall-Level Sentiment"
+TOPIC_PROMINENCE_COL = "Topic_Prominence"
+TOPIC_SENTIMENT_COL = "Topic_Sentiment"
 TOPIC_STATE_COL = "Topic_State"
 
-OUTLET_SCORE_COL = "Orchestra_Pub_Tier"
+OUTLET_SCORE_COL = "Outlet score"
 PUB_TIER_COL = "Pub_Tier"
 BODY_LENGTH_COL = "Body - Length - Words"
 
 NARRATIVE_TIE_PRECEDENCE: List[str] = [
-    "Narrative_BusinessMomentum",
-    "Narrative_ResponsibleGaming",
+    "Narrative_Business",
+    "Narrative_Morality",
     "Narrative_Entertainment", 
     "Narrative_Regulatory",
-    "Narrative_IndustryGrowth",
+    "Narrative_Economic",
 ]
 
 NARRATIVE_MAPPINGS: Dict[str, NarrativeColumnMapping] = {
-    "Narrative_BusinessMomentum": NarrativeColumnMapping(
-        description="O_Overall - Message 1 Description (Business Momentum)",
-        prominence="O_Overall - Message 1 Prominence (Business Momentum)",
-        sentiment="O_Overall - Message 1 Sentiment (Business Momentum)",
-        state="O_M_1state",
+    "Narrative_Business": NarrativeColumnMapping(
+        description="Narrative_Business_Description",
+        prominence="Narrative_Business_Prominence",
+        sentiment="Narrative_Business_Sentiment",
+        state="Narrative_Business_State",
     ),
-    "Narrative_ResponsibleGaming": NarrativeColumnMapping(
-        description="O_Overall - Message 2 Description (Responsible Gaming, Moral Hazard & Legal Scrutiny)",
-        prominence="O_Overall - Message 2 Prominence (Responsible Gaming, Moral Hazard & Legal Scrutiny)",
-        sentiment="O_Overall - Message 2 Sentiment (Responsible Gaming, Moral Hazard & Legal Scrutiny)",
-        state="O_M_2state",
+    "Narrative_Morality": NarrativeColumnMapping(
+        description="Narrative_Morality_Description",
+        prominence="Narrative_Morality_Prominence",
+        sentiment="Narrative_Morality_Sentiment",
+        state="Narrative_Morality__State",
     ),
     "Narrative_Entertainment": NarrativeColumnMapping(
-        description="O_Overall - Message 3 Description (Betting enhances sports entertainment)",
-        prominence="O_Overall - Message 3 Prominence (Betting enhances sports entertainment)",
-        sentiment="O_Overall - Message 3 Sentiment (Betting enhances sports entertainment)",
-        state="O_M_3state",
+        description="Narrtaive_Entertainment_Description",
+        prominence="Narrtaive_Entertainment_Prominence",
+        sentiment="Narrtaive_Entertainment_Sentiment",
+        state="Narrtaive_Entertainment_State",
     ),
     "Narrative_Regulatory": NarrativeColumnMapping(
-        description="O_Overall - Message 4 Description (Regulatory and policymaker oversight)",
-        prominence="O_Overall - Message 4 Prominence (Regulatory and policymaker oversight)",
-        sentiment="O_Overall - Message 4 Sentiment (Regulatory and policymaker oversight)",
-        state="O_M_4state",
+        description="Narrative_Regulatory_Description",
+        prominence="Narrative_Regulatory_Prominence",
+        sentiment="Narrative_Regulatory_Sentiment ",
+        state="Narrative_Regulatory_State",
     ),
-    "Narrative_IndustryGrowth": NarrativeColumnMapping(
-        description="O_Overall - Message 5 Description (Industry growth and economic impact)",
-        prominence="O_Overall - Message 5 Prominence (Industry growth and economic impact)",
-        sentiment="O_Overall - Message 5 Sentiment (Industry growth and economic impact)",
-        state="O_M_5state",
+    "Narrative_Economic": NarrativeColumnMapping(
+        description="Narrative_Economic_Description",
+        prominence="Narrative_Economic_Prominence",
+        sentiment="Narrative_Economic_Sentiment",
+        state="Narrative_Economic_State",
     ),
 }
 
 ENTITY_MAPPINGS: Dict[str, EntityColumnMapping] = {
     "Bet365": EntityColumnMapping(
-        quality_score="1_Orchestra_Quality_Score",
-        prominence="1_Bet365 - Company-Level Prominence",
-        sentiment="1_Bet365 - Company-Level Sentiment",
-        description="1_Bet365 - Company-Level Description",
-        state="1_C_State",
-        modifier="1_C_Modifier",
+        quality_score="Entity_Bet365_Quality_Score",
+        prominence="Entity_Bet365_Prominence",
+        sentiment="Entity_Bet365_Sentiment",
+        description="Entity_Bet365_Description",
+        state="Entity_Bet365_State",
+        modifier="Entity_Bet365_Modifier",
     ),
     "FanDuel": EntityColumnMapping(
-        quality_score="2_Orchestra_Quality_Score",
-        prominence="2_FanDuel - Company-Level Prominence",
-        sentiment="2_FanDuel - Company-Level Sentiment",
-        description="2_FanDuel - Company-Level Description",
-        state="2_C_State",
-        modifier="2_C_Modifier",
+        quality_score="Entity_FanDuel_Quality_Score",
+        prominence="Entity_FanDuel_Prominence",
+        sentiment="Entity_FanDuel_Sentiment",
+        description="Entity_FanDuel_Description",
+        state="Entity_FanDuel_State",
+        modifier="Entity_FanDuel_Modifier",
     ),
     "DraftKings": EntityColumnMapping(
-        quality_score="3_Orchestra_Quality_Score",
-        prominence="3_DraftKings - Company-Level Prominence",
-        sentiment="3_DraftKings - Company-Level Sentiment",
-        description="3_DraftKings - Company-Level Description",
-        state="3_C_State",
-        modifier="3_C_Modifier",
+        quality_score="Entity_DraftKings_Quality_Score",
+        prominence="Entity_DraftKings_Prominence",
+        sentiment="Entity_DraftKings_Sentiment",
+        description="Entity_DraftKings_Description",
+        state="Entity_DraftKings_State",
+        modifier="Entity_DraftKings_Modifier",
     ),
     "BetMGM": EntityColumnMapping(
-        quality_score="4_Orchestra_Quality_Score",
-        prominence="4_BetMGM - Company-Level Prominence",
-        sentiment="4_BetMGM - Company-Level Sentiment",
-        description="4_BetMGM - Company-Level Description",
-        state="4_C_State",
-        modifier="4_C_Modifier",
+        quality_score="Enity_BetMGM_Quality_Score",
+        prominence="Enity_BetMGM_Prominence",
+        sentiment="Enity_BetMGM_Sentiment",
+        description="Enity_BetMGM_Description",
+        state="Enity_BetMGM_State",
+        modifier="Enity_BetMGM_Modifier",
     ),
 }
 
@@ -225,6 +225,12 @@ def assign_entity_state(entity_present: bool, any_narrative_present: bool, entit
         return "Absent"
     if not entity_present and any_narrative_present:
         return "Off-Stage"
+    
+    # Block tone-dependent states when sentiment is NaN/null
+    # Fix per Ben's feedback: "Block assignment of Supporting Player / Under Fire / Leader when sentiment is null"
+    if entity_present and (entity_sent is None or str(entity_sent).lower() in ['nan', 'none']):
+        return "Undetermined"  # Hold in neutral state until sentiment resolves
+    
     if entity_present and entity_prom >= 3.0 and entity_sent >= 0.0:
         return "Leader"
     if entity_present and entity_prom > 0.0 and entity_sent < 0.0:
@@ -250,30 +256,38 @@ def assign_absent_modifier(topic_present: bool, topic_prom: float, topic_sent: f
 
 
 def assign_off_stage_modifier(narr_prom: float, narr_sent: float, prominent_tracked_entities: int) -> str:
-    # Precedence: Guilt by Association, Innocent Bystander, Reporter-Led Risk, Competitor-Led, Missed Opportunity, Overlooked
+    # Deterministic order per Ben's feedback - NO fallthrough to NaN/empty
+    # Concrete fix (deterministic order):
+    # 1. If Narr_Sent ≥ 0:
+    #    * peers ≥1 → Competitor-Led
+    #    * Narr_Prom ≥ 2.5 & peers = 0 → Missed Opportunity
+    # 2. If Narr_Sent < 0:
+    #    * peers ≥2 → Guilt by Association
+    #    * peers = 1 → Innocent Bystander
+    #    * Narr_Prom ≥ 2.5 & peers = 0 → Reporter-Led Risk
+    # 3. Else (Narr_Prom < 2.5 & peers = 0) → Overlooked.
     
-    # First evaluate high-prominence narratives (≥ 2.5)
-    if narr_prom >= 2.5:
-        # Negative sentiment cases
-        if narr_sent < 0.0:
-            if prominent_tracked_entities >= 2:
-                return "Guilt by Association"
-            if prominent_tracked_entities == 1:
-                return "Innocent Bystander"
-            if prominent_tracked_entities == 0:
-                return "Reporter-Led Risk"
+    if narr_sent >= 0.0:
         # Non-negative sentiment cases
-        else:  # narr_sent >= 0.0
-            if prominent_tracked_entities >= 1:
-                return "Competitor-Led"
-            if prominent_tracked_entities == 0:
-                return "Missed Opportunity"
+        if prominent_tracked_entities >= 1:
+            return "Competitor-Led"
+        if narr_prom >= 2.5 and prominent_tracked_entities == 0:
+            return "Missed Opportunity"
+    else:
+        # Negative sentiment cases (narr_sent < 0.0)
+        if prominent_tracked_entities >= 2:
+            return "Guilt by Association"
+        if prominent_tracked_entities == 1:
+            return "Innocent Bystander"
+        if narr_prom >= 2.5 and prominent_tracked_entities == 0:
+            return "Reporter-Led Risk"
     
-    # Low-prominence narratives (< 2.5) - only assign Overlooked if no prominent peers
+    # Final fallback: only if (Narr_Prom < 2.5 & peers = 0)
     if narr_prom < 2.5 and prominent_tracked_entities == 0:
         return "Overlooked"
     
-    return ""
+    # This should never happen with deterministic logic, but safety fallback
+    return "Overlooked"
 
 
 def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -> str:
@@ -359,21 +373,9 @@ def process(csv_path: str) -> str:
     # Check for required columns and provide detailed error message
     missing_cols = []
     
-    # Check required topic columns - create Topic Prominence if missing
+    # Check required topic columns
     if TOPIC_PROMINENCE_COL not in df.columns:
-        # Create Topic Prominence as max of all message prominences
-        message_prom_cols = [
-            "O_Overall - Message 1 Prominence (Business Momentum)",
-            "O_Overall - Message 2 Prominence (Responsible Gaming, Moral Hazard & Legal Scrutiny)",
-            "O_Overall - Message 3 Prominence (Betting enhances sports entertainment)",
-            "O_Overall - Message 4 Prominence (Regulatory and policymaker oversight)",
-            "O_Overall - Message 5 Prominence (Industry growth and economic impact)"
-        ]
-        available_prom_cols = [col for col in message_prom_cols if col in df.columns]
-        if available_prom_cols:
-            df[TOPIC_PROMINENCE_COL] = df[available_prom_cols].apply(lambda row: row.max(), axis=1)
-        else:
-            missing_cols.append(TOPIC_PROMINENCE_COL)
+        missing_cols.append(TOPIC_PROMINENCE_COL)
     
     # Check for topic sentiment (can have variations)
     topic_sent_cols = [c for c in df.columns if c.startswith("Topic_Sentiment")]
@@ -440,16 +442,11 @@ def process(csv_path: str) -> str:
 
         # Assign narrative state
         def _narr_state_row(row: pd.Series) -> str:
-            # Check if state already exists and is not empty
-            existing_state = row.get(mapping.state, "")
-            if existing_state and str(existing_state).strip() and str(existing_state) not in ["nan", "NaN", ""]:
-                return str(existing_state)
-            
-            # Calculate state if empty or missing
+            # Calculate state based on prominence/sentiment - always recalculate for Business narrative fix
             prom = coerce_float(row.get(mapping.prominence, 0.0))
             sent = coerce_float(row.get(mapping.sentiment, 0.0))
             
-            # Fix 2B: When prominence = 0, assign "Absent" deterministically
+            # Fix 3: Business narrative - When prominence = 0, assign "Absent" deterministically
             if prom == 0.0:
                 return "Absent"
             
@@ -468,12 +465,7 @@ def process(csv_path: str) -> str:
 
     # Topic state assignment (gate sentiment by presence)
     def _topic_state_row(row: pd.Series) -> str:
-        # Check if state already exists and is not empty (handles both Topic_State and Topic_Sate)
-        existing_state = row.get(TOPIC_STATE_COL, "") or row.get("Topic_Sate", "")
-        if existing_state and str(existing_state).strip() and str(existing_state) not in ["nan", "NaN", ""]:
-            return str(existing_state)
-        
-        # Calculate state if empty or missing
+        # Always recalculate to ensure proper state assignment
         prom = coerce_float(row.get(TOPIC_PROMINENCE_COL, 0.0))
         sent = coerce_float(row.get(TOPIC_SENTIMENT_COL, 0.0))
         
@@ -516,12 +508,7 @@ def process(csv_path: str) -> str:
         df[sent_norm_col] = df[mapping.sentiment].apply(coerce_float).apply(normalize_sentiment_weak_collapse)
 
         def _entity_state_row(row: pd.Series) -> str:
-            # Check if state already exists and is not empty
-            existing_state = row.get(mapping.state, "")
-            if existing_state and str(existing_state).strip() and str(existing_state) not in ["nan", "NaN", ""]:
-                return str(existing_state)
-            
-            # Calculate state if empty or missing
+            # Always recalculate to ensure proper state assignment with NaN sentiment handling
             prom = coerce_float(row.get(mapping.prominence, 0.0))
             sent = coerce_float(row.get(mapping.sentiment, 0.0))
             ent_present = is_present(prom)

@@ -1,0 +1,145 @@
+﻿Short version: you fixed the boundary math and killed the “Overlooked everywhere” bug, but you introduced two new regressions and left one gap. Here’s the hard audit on Pass1_Veritical_Analysis_tmpm6eqev0i_input.csv, focused on the four issues I flagged last time — with line-item counts, examples, and the canon clauses they violate.
+What I re-checked (canon)
+* Entity states: 5-state ladder — Absent / Off-Stage / Supporting Player / Under Fire / Leader
+
+* Off-Stage modifiers: Competitor-Led / Missed Opportunity / Guilt by Association / Innocent Bystander / Reporter-Led Risk / Overlooked
+
+* Under Fire modifiers (plus our locked precedence fix on Stinger)
+
+* Topic & Narrative states with the updated Risky definition (Prom ≥ 2.5 and −2 ≤ Sent < 0) and Absent when Prom = 0  .
+
+________________
+
+
+1) Off-Stage modifiers — 
+NOT fully fixed
+What was wrong before: over-use of Overlooked.
+What’s wrong now: large swaths of Off-Stage rows have no modifier at all (NaN). That still violates canon (exactly one Off-Stage modifier per article-entity) .
+   * Off-Stage rows with missing modifier (NaN):
+
+      * BMW: 325 / 1,321
+
+      * Mercedes: 319 / 1,273
+
+      * Audi: 350 / 1,620
+
+      * Tesla: 180 / 1,272
+
+         * When I recompute the expected Off-Stage modifier using central-narrative polarity + peer counts (≥1/≥2 peers with Prom ≥ 2.0), I get 1,174 discrepancies, overwhelmingly because the assigned value is blank and the expected is Competitor-Led or Innocent Bystander.
+
+Interpretation: The defaulting problem flipped from “wrong bucket” to “no bucket.” Your code is often skipping assignment where the expected outcome is clear (esp. when the central narrative is negative and exactly one peer is prominent → Innocent Bystander; or positive with ≥1 prominent peer → Competitor-Led) .
+Concrete fix (deterministic order):
+            1. If Narr_Sent ≥ 0:
+
+               * peers ≥1 → Competitor-Led
+
+               * Narr_Prom ≥ 2.5 & peers = 0 → Missed Opportunity
+
+                  2. If Narr_Sent < 0:
+
+                     * peers ≥2 → Guilt by Association
+
+                     * peers = 1 → Innocent Bystander
+
+                     * Narr_Prom ≥ 2.5 & peers = 0 → Reporter-Led Risk
+
+                        3. Else (Narr_Prom < 2.5 & peers = 0) → Overlooked.
+
+(Exactly matches canon triggers .)
+
+________________
+
+
+2) Topic & Narrative state boundary at 
+−2.0
+ — 
+Fixed
+All Topic and Narrative states at Sent = −2.0 now resolve to Risky (not High Risk), which is correct under the updated rule (Prom ≥ 2.5 AND −2 ≤ Sent < 0) — zero mismatches detected .
+________________
+
+
+3) Missing 
+Absent
+ when Prom = 0 — 
+Partially fixed (Business still broken)
+You filled Absent correctly for Performance, Fun, Innovation, Experience, Sustainability; Business is still empty across the board.
+                           * Narrative_Business_Prominence == 0 in 1,986 rows
+
+                           * Narrative_Business_State = NaN for all of those — should be Absent (Prom = 0) .
+
+This is more than cosmetic. It directly corrupts entity state assignment for Absent vs Off-Stage:
+                              * 86 entity rows mis-state Absent where the Business narrative is actually present (e.g., Business Prom = 2–5) → those rows should be Off-Stage (topic present + ≥1 narrative present, entity Prom = 0) .
+
+Fix: In the narrative pass, when Narrative_Business_Prominence == 0, set Absent. When >0, apply the standard 6-state thresholds using your locked Risky band.
+________________
+
+
+4) Tone-dependent states with invalid sentiment — 
+Regressed (NaN now)
+You removed Sent = 0 in tone states (good), but you now assign tone-dependent states with Sent = NaN:
+                                 * BMW: 219 rows labeled Supporting Player / Under Fire / Leader with Entity_BMW_Sentiment = NaN
+
+                                 * Mercedes: 12 rows with the same problem
+
+Canon requires Sent ≠ 0 for these states, which presumes a valid score (not null) .
+Fix: Block assignment of Supporting Player / Under Fire / Leader when sentiment is null; route those rows for re-scoring or hold them in a neutral, non-tone state until sentiment resolves.
+________________
+
+
+5) Stinger precedence — 
+Clean
+No cases where Stinger is assigned while Body Blow conditions also apply (Prom ≥ 3, Sent ≤ −2, Outlet score > 2). That respects the precedence fix we locked (Stinger excluded if Shaper/Takedown/Body Blow conditions are met) .
+________________
+
+
+6) Takedown outlet tier — 
+Drift, likely intentional
+48/50 Takedown rows occur at Outlet score = 4 (2 at 5). Canon v3 had OS=5 for Takedown ; your recent proposal moved Takedown to OS=4, which explains this distribution. If that’s intended (I think it is), we should finalize the migration note so future audits don’t flag this as drift.
+________________
+
+
+Decision table (ship blockers vs clean-ups)
+Blockers (fix before ship):
+                                    1. Off-Stage: fill all missing modifiers per canon; no NaNs allowed.
+
+                                    2. Business narrative: set Absent at Prom = 0; compute states otherwise.
+
+                                    3. Tone states with Sent = NaN: do not assign Supporting/Under-Fire/Leader without a valid sentiment.
+
+Clean-ups (document as migration or backlog):
+                                       * Takedown OS = 4: confirm this is the new canon and issue a migration note (counts will differ vs historical).
+
+                                       * Optional: add a QA assert that no Topic/Narrative row at Sent = −2.0 is labeled High Risk (protect your new Risky band).
+
+________________
+
+
+Quick sanity examples (typical failures)
+                                          * Entity state error via Business gap: rows 62, 276, 1008, 1268, 1304 (Business Prom = 2–5; Central narrative Prom = 0). System sets Absent; correct state is Off-Stage (topic present + some narrative present, entity Prom = 0) .
+
+                                          * Off-Stage missing modifier: Hundreds of Off-Stage rows where expected is Competitor-Led or Innocent Bystander, but the cell is blank — violates one-modifier rule .
+
+                                          * Tone state with Sent = NaN: BMW rows (n=219) labeled Under Fire / Supporting Player / Leader with null sentiment — canon requires valid sentiment for tone states  .
+
+________________
+
+
+Minimal patches (deterministic)
+                                             1. Off-Stage modifier fill
+
+                                                * Implement the exact rule order above; no fall-through to NaN; Overlooked only if (Narr_Prom < 2.5 and peer_count = 0).
+
+                                                   2. Business narrative states
+
+                                                      * If Narrative_Business_Prominence == 0 → Absent.
+
+                                                      * Else apply the standard state thresholds with the Risky band −2 ≤ Sent < 0.
+
+                                                         3. Tone state guardrail
+
+                                                            * If state ∈ {Supporting Player, Under Fire, Leader} and Sent is null → withhold assignment; queue for re-score or backfill sentiment before assigning.
+
+________________
+
+
+If you want, I’ll produce (a) a mismatch CSV listing every offending row with old → expected, and (b) a post-patch summary (state/modifier frequencies by entity and narrative) so you can sanity-check the distribution after the fix.
