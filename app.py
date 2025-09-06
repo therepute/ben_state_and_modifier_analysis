@@ -173,6 +173,17 @@ DASHBOARD_HTML = """
           <div id=\"pass2_dl\">{% if pass2_dl_token %}<a class=\"download\" href=\"{{ url_for('download_token', token=pass2_dl_token) }}\">Download</a>{% else %}&nbsp;{% endif %}</div>
         </div>
       </form>
+      
+      <!-- Reset Button -->
+      <div style=\"margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee;\">
+        <form method=\"post\" action=\"{{ url_for('reset') }}\" onsubmit=\"return confirm('This will clear all data and return to the upload page. Continue?')\">
+          <input type=\"hidden\" name=\"u\" value=\"{{ up_token }}\" />
+          <button class=\"btn\" type=\"submit\" style=\"background-color: #6b7280; font-size: 14px;\">🔄 Reset & Start Over</button>
+        </form>
+        <div style=\"color: #6b7280; font-size: 12px; margin-top: 4px;\">
+          This will clear the uploaded file and all results, returning you to the upload page.
+        </div>
+      </div>
     </div>
     <script>
       (function(){
@@ -351,6 +362,38 @@ def download_token(token: str) -> Response:
         flash("File not found.", "error")
         return redirect(url_for("index"))
     return send_file(path, mimetype="text/csv", as_attachment=True, download_name=suggest)
+
+
+@app.post("/reset")
+def reset() -> Response:
+    up_token = request.form.get("u", "")
+    
+    # Clean up uploaded file
+    tmp_path = UPLOADS.pop(up_token, None)
+    if tmp_path and os.path.exists(tmp_path):
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass  # Ignore cleanup errors
+    
+    # Clean up associated downloads
+    to_remove = []
+    for token, (path, name) in DOWNLOADS.items():
+        if tmp_path and path.startswith(os.path.dirname(tmp_path)):
+            to_remove.append(token)
+            try:
+                os.unlink(path)
+            except OSError:
+                pass  # Ignore cleanup errors
+    
+    for token in to_remove:
+        DOWNLOADS.pop(token, None)
+    
+    # Clean up Pass 2 jobs
+    PASS2_JOBS.pop(up_token, None)
+    
+    flash("Session reset. Please upload a new CSV file.", "success")
+    return redirect(url_for("index"))
 
 
 @app.get("/logo")
