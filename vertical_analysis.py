@@ -39,81 +39,232 @@ OUTLET_SCORE_COL = "Outlet score"
 PUB_TIER_COL = "Pub_Tier"
 BODY_LENGTH_COL = "Body - Length - Words"
 
-NARRATIVE_TIE_PRECEDENCE: List[str] = [
-    "Narrative_Business",
-    "Narrative_Morality",
-    "Narrative_Entertainment", 
-    "Narrative_Regulatory",
-    "Narrative_Economic",
-]
+# These will be dynamically populated from CSV headers
+NARRATIVE_TIE_PRECEDENCE: List[str] = []
+NARRATIVE_MAPPINGS: Dict[str, NarrativeColumnMapping] = {}
+ENTITY_MAPPINGS: Dict[str, EntityColumnMapping] = {}
 
-NARRATIVE_MAPPINGS: Dict[str, NarrativeColumnMapping] = {
-    "Narrative_Business": NarrativeColumnMapping(
-        description="Narrative_Business_Description",
-        prominence="Narrative_Business_Prominence",
-        sentiment="Narrative_Business_Sentiment",
-        state="Narrative_Business_State",
-    ),
-    "Narrative_Morality": NarrativeColumnMapping(
-        description="Narrative_Morality_Description",
-        prominence="Narrative_Morality_Prominence",
-        sentiment="Narrative_Morality_Sentiment",
-        state="Narrative_Morality__State",
-    ),
-    "Narrative_Entertainment": NarrativeColumnMapping(
-        description="Narrtaive_Entertainment_Description",
-        prominence="Narrtaive_Entertainment_Prominence",
-        sentiment="Narrtaive_Entertainment_Sentiment",
-        state="Narrtaive_Entertainment_State",
-    ),
-    "Narrative_Regulatory": NarrativeColumnMapping(
-        description="Narrative_Regulatory_Description",
-        prominence="Narrative_Regulatory_Prominence",
-        sentiment="Narrative_Regulatory_Sentiment ",
-        state="Narrative_Regulatory_State",
-    ),
-    "Narrative_Economic": NarrativeColumnMapping(
-        description="Narrative_Economic_Description",
-        prominence="Narrative_Economic_Prominence",
-        sentiment="Narrative_Economic_Sentiment",
-        state="Narrative_Economic_State",
-    ),
-}
 
-ENTITY_MAPPINGS: Dict[str, EntityColumnMapping] = {
-    "Bet365": EntityColumnMapping(
-        quality_score="Entity_Bet365_Quality_Score",
-        prominence="Entity_Bet365_Prominence",
-        sentiment="Entity_Bet365_Sentiment",
-        description="Entity_Bet365_Description",
-        state="Entity_Bet365_State",
-        modifier="Entity_Bet365_Modifier",
-    ),
-    "FanDuel": EntityColumnMapping(
-        quality_score="Entity_FanDuel_Quality_Score",
-        prominence="Entity_FanDuel_Prominence",
-        sentiment="Entity_FanDuel_Sentiment",
-        description="Entity_FanDuel_Description",
-        state="Entity_FanDuel_State",
-        modifier="Entity_FanDuel_Modifier",
-    ),
-    "DraftKings": EntityColumnMapping(
-        quality_score="Entity_DraftKings_Quality_Score",
-        prominence="Entity_DraftKings_Prominence",
-        sentiment="Entity_DraftKings_Sentiment",
-        description="Entity_DraftKings_Description",
-        state="Entity_DraftKings_State",
-        modifier="Entity_DraftKings_Modifier",
-    ),
-    "BetMGM": EntityColumnMapping(
-        quality_score="Enity_BetMGM_Quality_Score",
-        prominence="Enity_BetMGM_Prominence",
-        sentiment="Enity_BetMGM_Sentiment",
-        description="Enity_BetMGM_Description",
-        state="Enity_BetMGM_State",
-        modifier="Enity_BetMGM_Modifier",
-    ),
-}
+def find_best_column_match(target: str, available_columns: List[str]) -> str:
+    """
+    Find the best matching column with enhanced typo tolerance.
+    
+    Tolerance includes:
+    - Case variations (Entity vs entity)
+    - Typos (Enity vs Entity, Narrtaive vs Narrative)
+    - Spacing issues (trailing spaces, double underscores)
+    - Quality vs Quality_Score variations
+    """
+    import difflib
+    
+    # Direct match first
+    if target in available_columns:
+        return target
+    
+    # Common typo patterns
+    typo_variants = [
+        target,
+        target.replace("Entity_", "Enity_"),
+        target.replace("Enity_", "Entity_"),
+        target.replace("Narrative_", "Narrtaive_"),
+        target.replace("Narrtaive_", "Narrative_"),
+        target.replace("_State", "__State"),  # double underscore
+        target + " ",  # trailing space
+        target.replace("_Quality_Score", "_Quality"),
+        target.replace("_Quality", "_Quality_Score"),
+        target.replace("_Qulaity_Score", "_Quality_Score"),  # common typo
+    ]
+    
+    # Check typo variants
+    for variant in typo_variants:
+        if variant in available_columns:
+            return variant
+    
+    # Fuzzy matching for close matches (80% similarity)
+    close_matches = difflib.get_close_matches(target, available_columns, n=1, cutoff=0.8)
+    if close_matches:
+        return close_matches[0]
+    
+    return None
+
+
+def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, EntityColumnMapping], Dict[str, NarrativeColumnMapping], List[str], Dict[str, List[str]]]:
+    """
+    Auto-detect companies and narratives from CSV column headers with enhanced error reporting.
+    
+    Pattern Recognition:
+    - Companies: Entity_{CompanyName}_Prominence/Sentiment/Description/Quality_Score/State/Modifier
+    - Narratives: Narrative_{MessageName}_Prominence/Sentiment/Description/Quality_Score/State
+    
+    Returns: (entity_mappings, narrative_mappings, narrative_precedence, debug_info)
+    """
+    import re
+    
+    entity_mappings = {}
+    narrative_mappings = {}
+    narrative_precedence = []
+    debug_info = {
+        "entity_issues": [],
+        "narrative_issues": [],
+        "detected_entities": [],
+        "detected_narratives": [],
+        "missing_required": [],
+        "successful_mappings": []
+    }
+    
+    # Pattern 1: Extract companies from Entity columns
+    entity_pattern = r'^(?:Enity_|Entity_)([^_]+)_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State|Modifier)$'
+    company_names = set()
+    
+    for col in columns:
+        match = re.match(entity_pattern, col)
+        if match:
+            company_names.add(match.group(1))
+    
+    debug_info["detected_entities"] = sorted(list(company_names))
+    
+    # Build entity mappings with error tracking
+    for company in sorted(company_names):
+        required_fields = ["Prominence", "Sentiment"]
+        optional_fields = ["Description", "Quality_Score", "State", "Modifier"]
+        
+        # Try multiple prefix patterns
+        prefix_variants = [f"Entity_{company}", f"Enity_{company}"]
+        actual_mappings = {}
+        
+        for field in required_fields + optional_fields:
+            best_match = None
+            for prefix in prefix_variants:
+                target = f"{prefix}_{field}"
+                match = find_best_column_match(target, columns)
+                if match:
+                    best_match = match
+                    break
+            
+            if best_match:
+                actual_mappings[field.lower()] = best_match
+            elif field in required_fields:
+                debug_info["entity_issues"].append(f"❌ {company}: Missing required field '{field}' (tried {[f'{p}_{field}' for p in prefix_variants]})")
+        
+        # Only create mapping if we have required fields
+        if all(field.lower() in actual_mappings for field in required_fields):
+            entity_mappings[company] = EntityColumnMapping(
+                quality_score=actual_mappings.get("quality_score", f"Entity_{company}_Quality_Score"),
+                prominence=actual_mappings["prominence"],
+                sentiment=actual_mappings["sentiment"], 
+                description=actual_mappings.get("description", f"Entity_{company}_Description"),
+                state=actual_mappings.get("state", f"Entity_{company}_State"),
+                modifier=actual_mappings.get("modifier", f"Entity_{company}_Modifier"),
+            )
+            debug_info["successful_mappings"].append(f"✅ {company}: {actual_mappings['prominence']}, {actual_mappings['sentiment']}")
+        else:
+            debug_info["missing_required"].append(f"Entity {company}")
+    
+    # Pattern 2: Extract narratives/messages from Narrative columns
+    narrative_pattern = r'^(?:Narrtaive_|Narrative_)([^_]+)_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State)$'
+    message_names = set()
+    
+    for col in columns:
+        match = re.match(narrative_pattern, col)
+        if match:
+            message_names.add(match.group(1))
+    
+    debug_info["detected_narratives"] = sorted(list(message_names))
+    
+    # Build narrative mappings with error tracking
+    for message in sorted(message_names):
+        required_fields = ["Prominence", "Sentiment"]
+        optional_fields = ["Description", "Quality_Score", "State"]
+        
+        prefix_variants = [f"Narrative_{message}", f"Narrtaive_{message}"]
+        actual_mappings = {}
+        
+        for field in required_fields + optional_fields:
+            best_match = None
+            for prefix in prefix_variants:
+                target = f"{prefix}_{field}"
+                match = find_best_column_match(target, columns)
+                if match:
+                    best_match = match
+                    break
+            
+            if best_match:
+                actual_mappings[field.lower()] = best_match
+            elif field in required_fields:
+                debug_info["narrative_issues"].append(f"❌ {message}: Missing required field '{field}' (tried {[f'{p}_{field}' for p in prefix_variants]})")
+        
+        # Only create mapping if we have required fields
+        if all(field.lower() in actual_mappings for field in required_fields):
+            narrative_key = f"Narrative_{message}"
+            narrative_mappings[narrative_key] = NarrativeColumnMapping(
+                description=actual_mappings.get("description", f"Narrative_{message}_Description"),
+                prominence=actual_mappings["prominence"],
+                sentiment=actual_mappings["sentiment"],
+                state=actual_mappings.get("state", f"Narrative_{message}_State"),
+            )
+            narrative_precedence.append(narrative_key)
+            debug_info["successful_mappings"].append(f"✅ {message}: {actual_mappings['prominence']}, {actual_mappings['sentiment']}")
+        else:
+            debug_info["missing_required"].append(f"Narrative {message}")
+    
+    return entity_mappings, narrative_mappings, narrative_precedence, debug_info
+
+
+def initialize_mappings_from_csv(csv_path: str) -> None:
+    """Initialize dynamic mappings from CSV headers with detailed preview"""
+    global ENTITY_MAPPINGS, NARRATIVE_MAPPINGS, NARRATIVE_TIE_PRECEDENCE
+    
+    # Read just the header to get column names
+    df_header = pd.read_csv(csv_path, nrows=0)
+    columns = df_header.columns.tolist()
+    
+    # Auto-detect and populate global mappings
+    ENTITY_MAPPINGS, NARRATIVE_MAPPINGS, NARRATIVE_TIE_PRECEDENCE, debug_info = auto_detect_companies_and_narratives(columns)
+    
+    # Display mapping preview
+    print("\n" + "="*60)
+    print("📋 MAPPING PREVIEW & VALIDATION")
+    print("="*60)
+    
+    # Show detected entities/narratives
+    print(f"🏢 Detected Companies: {debug_info['detected_entities']}")
+    print(f"📝 Detected Narratives: {debug_info['detected_narratives']}")
+    
+    # Show successful mappings
+    if debug_info["successful_mappings"]:
+        print(f"\n✅ Successful Mappings ({len(debug_info['successful_mappings'])}):")
+        for mapping in debug_info["successful_mappings"]:
+            print(f"   {mapping}")
+    
+    # Show any issues
+    all_issues = debug_info["entity_issues"] + debug_info["narrative_issues"]
+    if all_issues:
+        print(f"\n⚠️  Mapping Issues ({len(all_issues)}):")
+        for issue in all_issues:
+            print(f"   {issue}")
+    
+    # Show missing required entities/narratives
+    if debug_info["missing_required"]:
+        print(f"\n❌ Could Not Map ({len(debug_info['missing_required'])}):")
+        for missing in debug_info["missing_required"]:
+            print(f"   {missing} - Missing required Prominence/Sentiment columns")
+    
+    # Summary
+    print(f"\n📊 Final Mapping Summary:")
+    print(f"   • {len(ENTITY_MAPPINGS)} companies ready for analysis")
+    print(f"   • {len(NARRATIVE_MAPPINGS)} narratives ready for analysis")
+    print(f"   • Precedence order: {NARRATIVE_TIE_PRECEDENCE}")
+    
+    # Validation check
+    if not ENTITY_MAPPINGS:
+        print(f"\n🚨 WARNING: No companies detected! Check column naming patterns.")
+        print(f"   Expected: Entity_{{CompanyName}}_Prominence, Entity_{{CompanyName}}_Sentiment")
+    
+    if not NARRATIVE_MAPPINGS:
+        print(f"\n🚨 WARNING: No narratives detected! Check column naming patterns.")
+        print(f"   Expected: Narrative_{{MessageName}}_Prominence, Narrative_{{MessageName}}_Sentiment")
+    
+    print("="*60 + "\n")
 
 
 # -------------------------------
@@ -368,6 +519,9 @@ def assign_entity_modifier(
 # -------------------------------
 
 def process(csv_path: str) -> str:
+    # Initialize dynamic mappings first
+    initialize_mappings_from_csv(csv_path)
+    
     df = pd.read_csv(csv_path, low_memory=False)
     
     # Check for required columns and provide detailed error message
