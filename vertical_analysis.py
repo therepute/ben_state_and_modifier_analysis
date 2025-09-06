@@ -441,42 +441,35 @@ def assign_absent_modifier(topic_present: bool, topic_prom: float, topic_sent: f
 
 
 def assign_off_stage_modifier(narr_prom: float, narr_sent: float, prominent_tracked_entities: int) -> str:
-    # Deterministic order per Ben's feedback - NO fallthrough to NaN/empty
-    # Concrete fix (deterministic order):
-    # 1. If Narr_Sent ≥ 0:
-    #    * peers ≥1 → Competitor-Led
-    #    * Narr_Prom ≥ 2.5 & peers = 0 → Missed Opportunity
-    # 2. If Narr_Sent < 0:
-    #    * peers ≥2 → Guilt by Association
-    #    * peers = 1 → Innocent Bystander
-    #    * Narr_Prom ≥ 2.5 & peers = 0 → Reporter-Led Risk
-    # 3. Else (Narr_Prom < 2.5 & peers = 0) → Overlooked.
+    # Implement ONLY the 6 canonical conditions from Entity Modifiers Trigger Logic 2025-08-19.txt
+    # No fallbacks - cases that don't match any condition return empty string
     
-    if narr_sent >= 0.0:
-        # Non-negative sentiment cases
-        if prominent_tracked_entities >= 1:
-            return "Competitor-Led"
-        if narr_prom >= 2.5 and prominent_tracked_entities == 0:
-            return "Missed Opportunity"
-    else:
-        # Negative sentiment cases (narr_sent < 0.0)
-        if prominent_tracked_entities >= 2:
+    # Competitor-Led: Narr_Sent ≥ 0 AND count(peers with Prom ≥ 2.0) ≥ 1
+    if narr_sent >= 0.0 and prominent_tracked_entities >= 1:
+        return "Competitor-Led"
+    
+    # Missed Opportunity: Narr_Sent ≥ 0 AND Narr_Prom ≥ 2.5 AND count(peers) = 0
+    if narr_sent >= 0.0 and narr_prom >= 2.5 and prominent_tracked_entities == 0:
+        return "Missed Opportunity"
+    
+    # Guilt by Association: Narr_Sent < 0 AND count(peers) ≥ 2
+    if narr_sent < 0.0 and prominent_tracked_entities >= 2:
         return "Guilt by Association"
-        if prominent_tracked_entities == 1:
+    
+    # Innocent Bystander: Narr_Sent < 0 AND count(peers) = 1
+    if narr_sent < 0.0 and prominent_tracked_entities == 1:
         return "Innocent Bystander"
-        if narr_prom >= 2.5 and prominent_tracked_entities == 0:
+    
+    # Reporter-Led Risk: Narr_Sent < 0 AND Narr_Prom ≥ 2.5 AND count(peers) = 0
+    if narr_sent < 0.0 and narr_prom >= 2.5 and prominent_tracked_entities == 0:
         return "Reporter-Led Risk"
     
-    # Final fallback: only if (Narr_Prom < 2.5 & peers = 0)
+    # Overlooked: Narr_Prom < 2.5 AND count(peers) = 0 (any sentiment)
     if narr_prom < 2.5 and prominent_tracked_entities == 0:
         return "Overlooked"
     
-    # Edge case fallback: if we somehow miss the above cases, default to appropriate modifier
-    # This shouldn't happen with proper deterministic logic
-    if narr_sent >= 0.0:
-        return "Missed Opportunity"  # Non-negative fallback
-    else:
-        return "Reporter-Led Risk"   # Negative fallback
+    # No canonical condition matched - return empty to surface logic gaps
+    return ""
 
 
 def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -> str:
