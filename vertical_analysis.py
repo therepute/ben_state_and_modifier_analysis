@@ -627,7 +627,7 @@ def assign_entity_modifier(
 ) -> str:
     if entity_state == "Absent":
         return assign_absent_modifier(topic_present, topic_prom, topic_sent, any_narrative_present)
-    if entity_state == "Off-Stage":
+    if entity_state in ["Off-Stage", "Offstage"]:  # Handle both naming conventions
         return assign_off_stage_modifier(central_narr_prom, central_narr_sent, prominent_tracked_entities)
     if entity_state == "Supporting Player":
         return assign_supporting_player_modifier(outlet_score, entity_sent)
@@ -827,9 +827,11 @@ def process(csv_path: str) -> str:
             return assign_entity_state(ent_present, any_narr_present, prom, gated)
 
         def _entity_modifier_row(row: pd.Series) -> str:
-            # Always recalculate modifiers (per Ben's audit - don't preserve existing values)
-            # Force recalculation of entity state - ignore contaminated input CSV values
-            entity_state = _entity_state_row(row)
+            # Calculate modifiers based on EXISTING entity state from input CSV
+            # DO NOT recalculate state - preserve what's in the input data
+            # Get existing state from CSV, handle NaN values
+            raw_state = row.get(mapping.state, "")
+            entity_state = str(raw_state).strip() if pd.notna(raw_state) else ""
 
             outlet_score = coerce_float(row.get(OUTLET_SCORE_COL, 0.0))
             prom = coerce_float(row.get(mapping.prominence, 0.0))
@@ -856,8 +858,12 @@ def process(csv_path: str) -> str:
                 prominent_cnt,
             )
 
-        df[mapping.state] = df.apply(_entity_state_row, axis=1)
-        df[mapping.modifier] = df.apply(_entity_modifier_row, axis=1)
+        # PRESERVE INPUT STATES - do not overwrite them!
+        # The input CSV already contains correct entity states (Absent, Off-Stage, etc.)
+        # Our job is only to calculate modifiers based on those existing states
+        
+        # df[mapping.state] = df.apply(_entity_state_row, axis=1)  # ❌ REMOVED - Don't overwrite input states
+        df[mapping.modifier] = df.apply(_entity_modifier_row, axis=1)  # ✅ Only calculate modifiers
 
     # Basic validation flags
     def _validation_notes(row: pd.Series) -> str:
