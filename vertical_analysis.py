@@ -882,7 +882,10 @@ def process(csv_path: str) -> str:
             df[mapping.state] = df.apply(_entity_state_row, axis=1)
         
         # Always calculate modifiers based on the final states (preserved + calculated)
-        df[mapping.modifier] = df.apply(_entity_modifier_row, axis=1)
+        # Force string type to preserve empty strings instead of converting to NaN
+        df[mapping.modifier] = df.apply(_entity_modifier_row, axis=1).astype(str)
+        # Replace 'nan' strings with empty strings for canonical gaps
+        df[mapping.modifier] = df[mapping.modifier].replace('nan', '')
 
     # Basic validation flags
     def _validation_notes(row: pd.Series) -> str:
