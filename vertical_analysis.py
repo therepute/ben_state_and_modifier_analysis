@@ -464,7 +464,7 @@ def assign_topic_state(topic_present: bool, topic_prom: float, topic_sent: float
 def assign_narrative_state(narr_present: bool, narr_prom: float, narr_sent: float) -> str:
     if not narr_present:
         return "Absent"
-    # Precedence: High Risk, Risky, Healthy, Ambient Risk, Niche
+    # Precedence: High Risk, Risky, Healthy, Ambient Risk, Peripheral
     if narr_prom >= 2.5 and narr_sent < -2.0:
         return "High Risk"
     if narr_prom >= 2.5 and 0.0 > narr_sent >= -2.0:
@@ -474,7 +474,7 @@ def assign_narrative_state(narr_present: bool, narr_prom: float, narr_sent: floa
     if narr_prom < 2.5 and narr_sent < 0.0:
         return "Ambient Risk"
     if narr_prom < 2.5 and narr_sent >= 0.0:
-        return "Niche"
+        return "Peripheral"
     return "Undetermined"
 
 
@@ -864,12 +864,21 @@ def process(csv_path: str) -> str:
                 prominent_cnt,
             )
 
-        # PRESERVE INPUT STATES - do not overwrite them!
-        # The input CSV already contains correct entity states (Absent, Off-Stage, etc.)
-        # Our job is only to calculate modifiers based on those existing states
+        # HYBRID STATE HANDLING: 
+        # - Preserve existing states (e.g., Bet365 client data)
+        # - Calculate missing states (e.g., BetMGM, DraftKings, FanDuel)
         
-        # df[mapping.state] = df.apply(_entity_state_row, axis=1)  # ❌ REMOVED - Don't overwrite input states
-        df[mapping.modifier] = df.apply(_entity_modifier_row, axis=1)  # ✅ Only calculate modifiers
+        # Check if state column exists and has data
+        if mapping.state in df.columns:
+            # Fill missing states only - preserve existing ones
+            mask_missing_state = df[mapping.state].isna() | (df[mapping.state] == '') | (df[mapping.state] == 'nan')
+            df.loc[mask_missing_state, mapping.state] = df.loc[mask_missing_state].apply(_entity_state_row, axis=1)
+        else:
+            # Create new state column - calculate all states
+            df[mapping.state] = df.apply(_entity_state_row, axis=1)
+        
+        # Always calculate modifiers based on the final states (preserved + calculated)
+        df[mapping.modifier] = df.apply(_entity_modifier_row, axis=1)
 
     # Basic validation flags
     def _validation_notes(row: pd.Series) -> str:
