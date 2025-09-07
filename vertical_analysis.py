@@ -575,14 +575,14 @@ def assign_under_fire_modifier(prom: float, sent: float, outlet: float) -> str:
     """
     Canonical Under Fire modifier logic per Ben's v4 audit feedback.
     Uses exact outlet boundaries and strict precedence.
-    Handles canonical gap with bridge logic per Ben's guidance.
+    Fixed: Takedown=4, Body Blow>2 (not 4), Stinger≤3
     """
-    # Canonical Under Fire modifiers (exact equals + strict precedence)
+    # Canonical Under Fire modifiers (exact precedence per Ben's audit)
     if prom >= 4 and sent <= -3.0 and outlet == 5:
         return "Narrative Shaper"
     elif prom >= 3 and sent <= -2.0 and outlet == 4:
         return "Takedown"
-    elif prom >= 3 and sent <= -2.0 and outlet > 2:
+    elif prom >= 3 and sent <= -2.0 and outlet > 2 and outlet != 4:  # >2 but not 4 (not 5 either due to Narrative Shaper)
         return "Body Blow"
     elif prom >= 2.0 and sent <= -2.0 and outlet <= 3:
         return "Stinger"
@@ -592,10 +592,10 @@ def assign_under_fire_modifier(prom: float, sent: float, outlet: float) -> str:
         return "Collateral Damage"
     elif prom < 2.0 and (-2.0 < sent < 0):
         return "Peripheral Hit"
-    # Canonical gap bridge: Prom ∈ [2.0, 3), Sent ≤ -2.0, Outlet ≥ 4
-    # Canon has no rung for this case, but Ben suggests Stinger bridge for coverage
-    elif prom >= 2.0 and prom < 3.0 and sent <= -2.0 and outlet >= 4:
-        return "Stinger"  # Bridge assignment with implicit validation note
+    # Canonical gap bridge: Prom ∈ [2.0, 3), Sent ≤ -2.0, Outlet = 4
+    # This case doesn't qualify for Takedown (needs Prom≥3) or Stinger (needs Outlet≤3)
+    elif prom >= 2.0 and prom < 3.0 and sent <= -2.0 and outlet == 4:
+        return "Stinger"  # Bridge assignment per Ben's guidance
     else:
         return ""  # True canonical gap (should be rare)
 
