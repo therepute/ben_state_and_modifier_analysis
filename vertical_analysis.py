@@ -478,40 +478,53 @@ def assign_narrative_state(narr_present: bool, narr_prom: float, narr_sent: floa
     return "Undetermined"
 
 
-def assign_entity_state(entity_present: bool, any_narrative_present: bool, entity_prom: float, entity_sent: float) -> str:
-    # Precedence: Absent, Off-Stage, Leader, Under Fire, Supporting Player
-    if not entity_present and not any_narrative_present:
-        return "Absent"
-    if not entity_present and any_narrative_present:
-        return "Off-Stage"
+def assign_entity_state(entity_prom: float, entity_sent: float, topic_prom: float, tracked_narr_proms: list) -> str:
+    """
+    Canonical state assignment per Ben's latest audit feedback.
+    Uses max narrative prominence for narrative presence detection.
+    """
+    import pandas as pd
     
-    # Block tone-dependent states when sentiment is NaN/null
-    # Fix per Ben's feedback: "Block assignment of Supporting Player / Under Fire / Leader when sentiment is null"
-    if entity_present and (entity_sent is None or str(entity_sent).lower() in ['nan', 'none']):
-        return "Undetermined"  # Hold in neutral state until sentiment resolves
+    # Handle NaN/null entity prominence and sentiment
+    if pd.isna(entity_prom):
+        entity_prom = 0.0
+    if pd.isna(entity_sent):
+        entity_sent = 0.0
     
-    if entity_present and entity_prom >= 3.0 and entity_sent >= 0.0:
-        return "Leader"
-    if entity_present and entity_prom > 0.0 and entity_sent < 0.0:
+    # Ben's canonical narrative presence detection: use max narrative prominence
+    max_narr_prom = max([prom for prom in tracked_narr_proms if not pd.isna(prom)], default=0.0)
+    
+    # Ben's exact canonical state assignment logic
+    if topic_prom > 0 and entity_prom == 0:
+        # Off-Stage requires topic present AND max narrative prominence > 0
+        # Absent requires topic present AND max narrative prominence = 0
+        return "Off-Stage" if max_narr_prom > 0 else "Absent"
+    elif entity_prom > 0 and entity_sent < 0:
         return "Under Fire"
-    if entity_present and 0.0 < entity_prom < 3.0 and entity_sent >= 0.0:
+    elif entity_prom >= 3 and entity_sent > 0:
+        return "Leader"
+    elif 0 < entity_prom < 3 and entity_sent > 0:
         return "Supporting Player"
-    return "Undetermined"
+    else:
+        return "Undetermined"  # out-of-scope / data gap
 
 
 # -------------------------------
 # Modifier assignment logic (entity)
 # -------------------------------
 
-def assign_absent_modifier(topic_present: bool, topic_prom: float, topic_sent: float, any_narrative_present: bool) -> str:
-    # Precedence: Framing Risk, Narrative Drift, Not Relevant
-    if topic_present and topic_prom >= 2.0 and topic_sent < 0.0 and not any_narrative_present:
-        return "Framing Risk"
-    if topic_present and topic_prom >= 2.0 and topic_sent >= 0.0 and not any_narrative_present:
-        return "Narrative Drift"
-    if topic_present and topic_prom < 2.0 and not any_narrative_present:
+def assign_absent_modifier(topic_prom: float, topic_sent: float) -> str:
+    """
+    Canonical Absent modifier logic per Ben's audit feedback.
+    Uses topic prominence and sentiment only, with no tracked narratives present.
+    """
+    # Canonical Absent modifier rules (deterministic, short-circuit)
+    if topic_prom < 2:
         return "Not Relevant"
-    return ""
+    elif topic_sent >= 0:
+        return "Narrative Drift"
+    else:
+        return "Framing Risk"
 
 
 def assign_off_stage_modifier(narr_prom: float, narr_sent: float, prominent_tracked_entities: int) -> str:
@@ -546,76 +559,65 @@ def assign_off_stage_modifier(narr_prom: float, narr_sent: float, prominent_trac
     return ""
 
 
-def assign_supporting_player_modifier(outlet_score: float, entity_sent: float) -> str:
-    # Precedence: Strategic Signal, Low-Heat Visibility, Check the Box, Background Noise
-    if outlet_score >= 3 and entity_sent >= 3.0:
+def assign_supporting_player_modifier(outlet: float, sent: float) -> str:
+    """
+    Canonical Supporting Player modifier logic per Ben's audit feedback.
+    """
+    # Canonical Supporting Player modifiers
+    if outlet >= 3 and sent >= 3:
         return "Strategic Signal"
-    if outlet_score >= 3 and 0.5 <= entity_sent < 3.0:
+    elif outlet >= 3 and 0.5 <= sent < 3:
         return "Low-Heat Visibility"
-    if outlet_score < 3 and entity_sent >= 3.0:
+    elif outlet < 3 and sent >= 3:
         return "Check the Box"
-    if outlet_score < 3 and 0.5 <= entity_sent < 3.0:
+    elif outlet < 3 and 0.5 <= sent < 3:
         return "Background Noise"
-    return ""
+    else:
+        return ""
 
 
-def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
-    # Corrected per Ben's feedback: Narrative Shaper (no headline), Takedown (outlet=4)
-    # Canonical precedence: Narrative Shaper > Takedown > Body Blow > Stinger > Light Jab > Collateral/Peripheral
-    
-    # Narrative Shaper: Outlet = 5, prom ≥ 3, sent ≤ -2.0 (headline requirement removed per Ben)
-    if outlet_score == 5 and entity_prom >= 3.0 and entity_sent <= -2.0:
+def assign_under_fire_modifier(prom: float, sent: float, outlet: float) -> str:
+    """
+    Canonical Under Fire modifier logic per Ben's audit feedback.
+    Uses strict precedence and exact outlet checks; stop at first match.
+    """
+    # Canonical Under Fire modifiers (strict precedence; exact outlet checks)
+    if prom >= 4 and sent <= -3.0 and outlet == 5:
         return "Narrative Shaper"
-    
-    # Takedown: Would be outlet = 5 but Narrative Shaper takes precedence for all outlet=5 cases
-    
-    # Body Blow: Outlet > 2 (but not 5), prom ≥ 3, sent ≤ -2.0 (per canonical: not Narrative Shaper or Takedown)
-    if outlet_score > 2 and outlet_score != 5 and entity_prom >= 3.0 and entity_sent <= -2.0:
+    elif prom >= 3 and sent <= -2.0 and outlet == 4:
+        return "Takedown"
+    elif prom >= 3 and sent <= -2.0 and outlet > 2:
         return "Body Blow"
-    
-    # Stinger: prom ≥ 2, sent ≤ -2.0 (any outlet, but lower precedence than above)
-    if entity_prom >= 2.0 and entity_sent <= -2.0:
+    elif prom >= 2.0 and sent <= -2.0 and outlet <= 3:
         return "Stinger"
-    
-    # Light Jab: prom ≥ 2, -2 < sent < 0
-    if entity_prom >= 2.0 and 0.0 > entity_sent > -2.0:
+    elif prom >= 2.0 and (0 > sent > -2.0):
         return "Light Jab"
-    
-    # Collateral Damage: prom < 2, sent ≤ -2
-    if entity_prom < 2.0 and entity_sent <= -2.0:
+    elif prom < 2.0 and sent <= -2.0:
         return "Collateral Damage"
-    
-    # Peripheral Hit: prom < 2, -2 < sent < 0
-    if entity_prom < 2.0 and 0.0 > entity_sent > -2.0:
+    elif prom < 2.0 and (0 > sent > -2.0):
         return "Peripheral Hit"
-    
-    return ""
+    else:
+        return ""  # No canonical Under Fire sub-modifier fires
 
 
-def assign_leader_modifier(entity_prom: float, entity_sent: float, outlet_score: float) -> str:
-    # Precedence: Narrative Setter, Breakthrough, Great Story, Good Story, Routine Positive
-    # Note: Narrative Setter would require headline detection - not implemented yet
-    
-    # Breakthrough: Prom ≥ 4; Sent ≥ +3; Outlet ≥ 4 (not Narrative Setter)
-    if entity_prom >= 4.0 and entity_sent >= 3.0 and outlet_score >= 4:
+def assign_leader_modifier(prom: float, sent: float, outlet: float) -> str:
+    """
+    Canonical Leader modifier logic per Ben's audit feedback.
+    Respects the special Good Story branch.
+    """
+    # Canonical Leader modifiers (respect the special Good Story branch)
+    if prom >= 4 and sent >= 3 and outlet == 5:
+        return "Narrative Setter"
+    elif prom >= 4 and sent >= 3 and outlet >= 4:
         return "Breakthrough"
-    
-    # Great Story: Prom ≥ 3; Sent ≥ +2; Outlet ≥ 3; Not Breakthrough
-    if entity_prom >= 3.0 and entity_sent >= 2.0 and outlet_score >= 3:
+    elif prom >= 3 and sent >= 2 and outlet >= 3:
         return "Great Story"
-    
-    # Good Story: Prom ≥ 3; ((Outlet ≥ 3 AND Sent ≥ +1 AND Sent < +2) OR (Outlet < 3 AND Sent ≥ +2))
-    if entity_prom >= 3.0 and (
-        (outlet_score >= 3 and entity_sent >= 1.0 and entity_sent < 2.0) or 
-        (outlet_score < 3 and entity_sent >= 2.0)
-    ):
+    elif prom >= 3 and ((outlet >= 3 and 1 <= sent < 2) or (outlet < 3 and sent >= 2)):
         return "Good Story"
-    
-    # Routine Positive: Prom ≥ 3; Sent ≥ 0; Not others
-    if entity_prom >= 3.0 and entity_sent >= 0.0:
+    elif prom >= 3 and sent >= 0:
         return "Routine Positive"
-    
-    return ""
+    else:
+        return ""
 
 
 def assign_entity_modifier(
@@ -623,16 +625,14 @@ def assign_entity_modifier(
     outlet_score: float,
     entity_prom: float,
     entity_sent: float,
-    topic_present: bool,
     topic_prom: float,
     topic_sent: float,
-    any_narrative_present: bool,
     central_narr_prom: float,
     central_narr_sent: float,
     prominent_tracked_entities: int,
 ) -> str:
     if entity_state == "Absent":
-        return assign_absent_modifier(topic_present, topic_prom, topic_sent, any_narrative_present)
+        return assign_absent_modifier(topic_prom, topic_sent)
     if entity_state in ["Off-Stage", "Offstage"]:  # Handle both naming conventions
         return assign_off_stage_modifier(central_narr_prom, central_narr_sent, prominent_tracked_entities)
     if entity_state == "Supporting Player":
@@ -824,13 +824,19 @@ def process(csv_path: str) -> str:
         df[sent_norm_col] = df[mapping.sentiment].apply(coerce_float).apply(normalize_sentiment_weak_collapse)
 
         def _entity_state_row(row: pd.Series) -> str:
-            # Always recalculate to ensure proper state assignment with NaN sentiment handling
-            prom = coerce_float(row.get(mapping.prominence, 0.0))
-            sent = coerce_float(row.get(mapping.sentiment, 0.0))
-            ent_present = is_present(prom)
-            any_narr_present = bool(row.get("Any_Narrative_Present", False))
-            gated = gated_sentiment(prom, sent)
-            return assign_entity_state(ent_present, any_narr_present, prom, gated)
+            # Canonical state assignment using Ben's audit feedback
+            entity_prom = coerce_float(row.get(mapping.prominence, 0.0))
+            entity_sent = gated_sentiment(entity_prom, coerce_float(row.get(mapping.sentiment, 0.0)))
+            topic_prom = coerce_float(row.get(TOPIC_PROMINENCE_COL, 0.0))
+            
+            # Get tracked narrative prominences
+            tracked_narr_proms = []
+            for narr_key in NARRATIVE_TIE_PRECEDENCE:
+                narr_mapping = NARRATIVE_MAPPINGS[narr_key]
+                narr_prom = coerce_float(row.get(narr_mapping.prominence, 0.0))
+                tracked_narr_proms.append(narr_prom)
+            
+            return assign_entity_state(entity_prom, entity_sent, topic_prom, tracked_narr_proms)
 
         def _entity_modifier_row(row: pd.Series) -> str:
             # Calculate modifiers based on EXISTING entity state from input CSV
@@ -855,10 +861,8 @@ def process(csv_path: str) -> str:
                 outlet_score,
                 prom,
                 sent,
-                topic_present,
                 topic_prom,
                 topic_sent,
-                any_narr_present,
                 central_prom,
                 central_sent,
                 prominent_cnt,
