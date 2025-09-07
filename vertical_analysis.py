@@ -578,17 +578,17 @@ def assign_supporting_player_modifier(outlet: float, sent: float) -> str:
 
 def assign_under_fire_modifier(prom: float, sent: float, outlet: float) -> str:
     """
-    Canonical Under Fire modifier logic per Ben's audit feedback.
-    Uses strict precedence and exact outlet checks; stop at first match.
+    Canonical Under Fire modifier logic per the official trigger document.
+    Uses strict precedence as defined; stop at first match.
     """
-    # Canonical Under Fire modifiers (strict precedence; exact outlet checks)
+    # Canonical Under Fire modifiers (strict precedence per document)
     if prom >= 4 and sent <= -3.0 and outlet == 5:
         return "Narrative Shaper"
     elif prom >= 3 and sent <= -2.0 and outlet == 4:
         return "Takedown"
     elif prom >= 3 and sent <= -2.0 and outlet > 2:
         return "Body Blow"
-    elif prom >= 2.0 and sent <= -2.0 and outlet <= 3:
+    elif prom >= 2.0 and sent <= -2.0:  # Fixed: removed incorrect outlet restriction
         return "Stinger"
     elif prom >= 2.0 and (0 > sent > -2.0):
         return "Light Jab"
@@ -597,7 +597,7 @@ def assign_under_fire_modifier(prom: float, sent: float, outlet: float) -> str:
     elif prom < 2.0 and (0 > sent > -2.0):
         return "Peripheral Hit"
     else:
-        return ""  # No canonical Under Fire sub-modifier fires
+        return ""  # Should never happen with canonical rules
 
 
 def assign_leader_modifier(prom: float, sent: float, outlet: float) -> str:
@@ -882,12 +882,8 @@ def process(csv_path: str) -> str:
             df[mapping.state] = df.apply(_entity_state_row, axis=1)
         
         # Always calculate modifiers based on the final states (preserved + calculated)
-        # Force string type to preserve empty strings instead of converting to NaN
-        df[mapping.modifier] = df.apply(_entity_modifier_row, axis=1).astype(str)
-        # Replace 'nan' strings with a placeholder that won't be converted by CSV
-        # Use "NO_MODIFIER" instead of empty string to survive CSV save/reload
-        df[mapping.modifier] = df[mapping.modifier].replace('nan', 'NO_MODIFIER')
-        df[mapping.modifier] = df[mapping.modifier].replace('', 'NO_MODIFIER')
+        # All canonical states should have complete modifier coverage per trigger document
+        df[mapping.modifier] = df.apply(_entity_modifier_row, axis=1)
 
     # Basic validation flags
     def _validation_notes(row: pd.Series) -> str:
