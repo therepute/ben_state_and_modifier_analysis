@@ -57,6 +57,9 @@ def find_best_column_match(target: str, available_columns: List[str]) -> str:
     - Typos (Enity vs Entity, Narrtaive vs Narrative)
     - Spacing issues (trailing spaces, double underscores)
     - Quality vs Quality_Score variations
+    
+    NOTE: Fuzzy matching is disabled for State/Modifier fields to prevent
+    cross-entity contamination (e.g., BetMGM getting Bet365's columns).
     """
     import difflib
     
@@ -83,7 +86,12 @@ def find_best_column_match(target: str, available_columns: List[str]) -> str:
         if variant in available_columns:
             return variant
     
-    # Fuzzy matching for close matches (80% similarity)
+    # SECURITY FIX: Disable fuzzy matching for State/Modifier fields
+    # This prevents cross-entity contamination (e.g., BetMGM using Bet365's State column)
+    if target.endswith('_State') or target.endswith('_Modifier'):
+        return None
+    
+    # Fuzzy matching for close matches (80% similarity) - only for data columns
     close_matches = difflib.get_close_matches(target, available_columns, n=1, cutoff=0.8)
     if close_matches:
         return close_matches[0]
@@ -555,16 +563,14 @@ def assign_under_fire_modifier(entity_prom: float, entity_sent: float, outlet_sc
     # Corrected per Ben's feedback: Narrative Shaper (no headline), Takedown (outlet=4)
     # Canonical precedence: Narrative Shaper > Takedown > Body Blow > Stinger > Light Jab > Collateral/Peripheral
     
-    # Narrative Shaper: Outlet = 5, prom ≥ 3, sent ≤ -2.0 (no headline requirement per Ben)
+    # Narrative Shaper: Outlet = 5, prom ≥ 3, sent ≤ -2.0 (headline requirement removed per Ben)
     if outlet_score == 5 and entity_prom >= 3.0 and entity_sent <= -2.0:
         return "Narrative Shaper"
     
-    # Takedown: Outlet = 4, prom ≥ 3, sent ≤ -2.0 (Ben specified outlet=4, not 5)
-    if outlet_score == 4 and entity_prom >= 3.0 and entity_sent <= -2.0:
-        return "Takedown"
+    # Takedown: Would be outlet = 5 but Narrative Shaper takes precedence for all outlet=5 cases
     
-    # Body Blow: Outlet > 2 (but not 4 or 5), prom ≥ 3, sent ≤ -2.0
-    if outlet_score > 2 and outlet_score not in [4, 5] and entity_prom >= 3.0 and entity_sent <= -2.0:
+    # Body Blow: Outlet > 2 (but not 5), prom ≥ 3, sent ≤ -2.0 (per canonical: not Narrative Shaper or Takedown)
+    if outlet_score > 2 and outlet_score != 5 and entity_prom >= 3.0 and entity_sent <= -2.0:
         return "Body Blow"
     
     # Stinger: prom ≥ 2, sent ≤ -2.0 (any outlet, but lower precedence than above)
