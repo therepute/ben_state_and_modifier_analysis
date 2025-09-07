@@ -527,36 +527,31 @@ def assign_absent_modifier(topic_prom: float, topic_sent: float) -> str:
         return "Framing Risk"
 
 
-def assign_off_stage_modifier(narr_prom: float, narr_sent: float, prominent_tracked_entities: int) -> str:
-    # Implement ONLY the 6 canonical conditions from Entity Modifiers Trigger Logic 2025-08-19.txt
-    # No fallbacks - cases that don't match any condition return empty string
+def assign_off_stage_modifier(dominant_narr_prom: float, dominant_narr_sent: float, peer_count_prom_ge_2: int) -> str:
+    """
+    Canonical Off-Stage modifier logic per Ben's v4 audit feedback.
+    Uses:
+    - peer_count_prom_ge_2: Count of OTHER tracked entities with Prom >= 2.0 in same article
+    - dominant_narr_prom/sent: The tracked narrative with highest prominence in article
     
-    # Competitor-Led: Narr_Sent ≥ 0 AND count(peers with Prom ≥ 2.0) ≥ 1
-    if narr_sent >= 0.0 and prominent_tracked_entities >= 1:
+    Implements exactly the 6 canonical conditions with proper peer counting.
+    """
+    # Canonical Off-Stage modifiers (deterministic, exact precedence)
+    if dominant_narr_sent >= 0.0 and peer_count_prom_ge_2 >= 1:
         return "Competitor-Led"
-    
-    # Missed Opportunity: Narr_Sent ≥ 0 AND Narr_Prom ≥ 2.5 AND count(peers) = 0
-    if narr_sent >= 0.0 and narr_prom >= 2.5 and prominent_tracked_entities == 0:
+    elif dominant_narr_sent >= 0.0 and dominant_narr_prom >= 2.5 and peer_count_prom_ge_2 == 0:
         return "Missed Opportunity"
-    
-    # Guilt by Association: Narr_Sent < 0 AND count(peers) ≥ 2
-    if narr_sent < 0.0 and prominent_tracked_entities >= 2:
+    elif dominant_narr_sent < 0.0 and peer_count_prom_ge_2 >= 2:
         return "Guilt by Association"
-    
-    # Innocent Bystander: Narr_Sent < 0 AND count(peers) = 1
-    if narr_sent < 0.0 and prominent_tracked_entities == 1:
+    elif dominant_narr_sent < 0.0 and peer_count_prom_ge_2 == 1:
         return "Innocent Bystander"
-    
-    # Reporter-Led Risk: Narr_Sent < 0 AND Narr_Prom ≥ 2.5 AND count(peers) = 0
-    if narr_sent < 0.0 and narr_prom >= 2.5 and prominent_tracked_entities == 0:
+    elif dominant_narr_sent < 0.0 and dominant_narr_prom >= 2.5 and peer_count_prom_ge_2 == 0:
         return "Reporter-Led Risk"
-    
-    # Overlooked: Narr_Prom < 2.5 AND count(peers) = 0 (any sentiment)
-    if narr_prom < 2.5 and prominent_tracked_entities == 0:
+    elif dominant_narr_prom < 2.5 and peer_count_prom_ge_2 == 0:
         return "Overlooked"
-    
-    # No canonical condition matched - return empty to surface logic gaps
-    return ""
+    else:
+        # Should never happen with canonical rules
+        return ""
 
 
 def assign_supporting_player_modifier(outlet: float, sent: float) -> str:
@@ -578,26 +573,31 @@ def assign_supporting_player_modifier(outlet: float, sent: float) -> str:
 
 def assign_under_fire_modifier(prom: float, sent: float, outlet: float) -> str:
     """
-    Canonical Under Fire modifier logic per the official trigger document.
-    Uses strict precedence as defined; stop at first match.
+    Canonical Under Fire modifier logic per Ben's v4 audit feedback.
+    Uses exact outlet boundaries and strict precedence.
+    Handles canonical gap with bridge logic per Ben's guidance.
     """
-    # Canonical Under Fire modifiers (strict precedence per document)
+    # Canonical Under Fire modifiers (exact equals + strict precedence)
     if prom >= 4 and sent <= -3.0 and outlet == 5:
         return "Narrative Shaper"
     elif prom >= 3 and sent <= -2.0 and outlet == 4:
         return "Takedown"
     elif prom >= 3 and sent <= -2.0 and outlet > 2:
         return "Body Blow"
-    elif prom >= 2.0 and sent <= -2.0:  # Fixed: removed incorrect outlet restriction
+    elif prom >= 2.0 and sent <= -2.0 and outlet <= 3:
         return "Stinger"
-    elif prom >= 2.0 and (0 > sent > -2.0):
+    elif prom >= 2.0 and (-2.0 < sent < 0):
         return "Light Jab"
     elif prom < 2.0 and sent <= -2.0:
         return "Collateral Damage"
-    elif prom < 2.0 and (0 > sent > -2.0):
+    elif prom < 2.0 and (-2.0 < sent < 0):
         return "Peripheral Hit"
+    # Canonical gap bridge: Prom ∈ [2.0, 3), Sent ≤ -2.0, Outlet ≥ 4
+    # Canon has no rung for this case, but Ben suggests Stinger bridge for coverage
+    elif prom >= 2.0 and prom < 3.0 and sent <= -2.0 and outlet >= 4:
+        return "Stinger"  # Bridge assignment with implicit validation note
     else:
-        return ""  # Should never happen with canonical rules
+        return ""  # True canonical gap (should be rare)
 
 
 def assign_leader_modifier(prom: float, sent: float, outlet: float) -> str:
@@ -627,14 +627,14 @@ def assign_entity_modifier(
     entity_sent: float,
     topic_prom: float,
     topic_sent: float,
-    central_narr_prom: float,
-    central_narr_sent: float,
-    prominent_tracked_entities: int,
+    dominant_narr_prom: float,
+    dominant_narr_sent: float,
+    peer_count_prom_ge_2: int,
 ) -> str:
     if entity_state == "Absent":
         return assign_absent_modifier(topic_prom, topic_sent)
     if entity_state in ["Off-Stage", "Offstage"]:  # Handle both naming conventions
-        return assign_off_stage_modifier(central_narr_prom, central_narr_sent, prominent_tracked_entities)
+        return assign_off_stage_modifier(dominant_narr_prom, dominant_narr_sent, peer_count_prom_ge_2)
     if entity_state == "Supporting Player":
         return assign_supporting_player_modifier(outlet_score, entity_sent)
     if entity_state == "Under Fire":
@@ -848,13 +848,29 @@ def process(csv_path: str) -> str:
             outlet_score = coerce_float(row.get(OUTLET_SCORE_COL, 0.0))
             prom = coerce_float(row.get(mapping.prominence, 0.0))
             sent = gated_sentiment(prom, coerce_float(row.get(mapping.sentiment, 0.0)))
-            topic_present = bool(row.get("Topic_Present", False))
             topic_prom = coerce_float(row.get(TOPIC_PROMINENCE_COL, 0.0))
             topic_sent = gated_sentiment(topic_prom, coerce_float(row.get(TOPIC_SENTIMENT_COL, 0.0)))
-            any_narr_present = bool(row.get("Any_Narrative_Present", False))
-            central_prom = coerce_float(row.get("Central_Narrative_Prominence", 0.0))
-            central_sent = gated_sentiment(central_prom, coerce_float(row.get("Central_Narrative_Sentiment", 0.0)))
-            prominent_cnt = int(row.get("prominent_tracked_entities_in_article", 0))
+
+            # BEN'S V4 AUDIT FIX: Compute dominant narrative and peer count correctly
+            
+            # 1. Find dominant narrative (highest prominence among tracked narratives)
+            dominant_narr_prom = 0.0
+            dominant_narr_sent = 0.0
+            for narr_key in NARRATIVE_TIE_PRECEDENCE:
+                narr_mapping = NARRATIVE_MAPPINGS[narr_key]
+                narr_prom = coerce_float(row.get(narr_mapping.prominence, 0.0))
+                if narr_prom > dominant_narr_prom:
+                    dominant_narr_prom = narr_prom
+                    dominant_narr_sent = gated_sentiment(narr_prom, coerce_float(row.get(narr_mapping.sentiment, 0.0)))
+            
+            # 2. Count peers with Prominence >= 2.0 (OTHER entities, not current one)
+            peer_count_prom_ge_2 = 0
+            current_entity_name = entity_name  # From the outer loop
+            for other_entity_name, other_mapping in ENTITY_MAPPINGS.items():
+                if other_entity_name != current_entity_name:
+                    other_prom = coerce_float(row.get(other_mapping.prominence, 0.0))
+                    if other_prom >= 2.0:
+                        peer_count_prom_ge_2 += 1
 
             return assign_entity_modifier(
                 entity_state,
@@ -863,9 +879,9 @@ def process(csv_path: str) -> str:
                 sent,
                 topic_prom,
                 topic_sent,
-                central_prom,
-                central_sent,
-                prominent_cnt,
+                dominant_narr_prom,
+                dominant_narr_sent,
+                peer_count_prom_ge_2,
             )
 
         # HYBRID STATE HANDLING: 
