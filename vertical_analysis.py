@@ -577,25 +577,25 @@ def assign_under_fire_modifier(prom: float, sent: float, outlet: float) -> str:
     Uses exact outlet boundaries and strict precedence.
     Fixed: Takedown=4, Body Blow>2 (not 4), Stinger≤3
     """
-    # Canonical Under Fire modifiers (exact precedence per Ben's audit)
-    if prom >= 3 and sent <= -2.0 and outlet == 5:
+    # CANONICAL UNDER FIRE MODIFIERS (Ben's exact v5 audit fix)
+    # Fixed: Narrative Shaper only fires with Prom ≥ 4, Sent ≤ -3.0, Outlet = 5
+    # Fixed: Takedown must be Prom ≥ 3, Sent ≤ -2.0, Outlet = 4
+    if prom >= 4 and sent <= -3.0 and outlet == 5:
         return "Narrative Shaper"
-    elif prom >= 3 and sent <= -2.0 and outlet > 2 and outlet != 5:  # >2 but not 5 (to exclude Narrative Shaper/Takedown)
+    elif prom >= 3 and sent <= -2.0 and outlet == 4:
+        return "Takedown"
+    elif prom >= 3 and sent <= -2.0 and outlet > 2:
         return "Body Blow"
     elif prom >= 2.0 and sent <= -2.0 and outlet <= 3:
         return "Stinger"
-    elif prom >= 2.0 and (-2.0 < sent < 0):
+    elif prom >= 2.0 and -2.0 < sent < 0:
         return "Light Jab"
     elif prom < 2.0 and sent <= -2.0:
         return "Collateral Damage"
-    elif prom < 2.0 and (-2.0 < sent < 0):
+    elif prom < 2.0 and -2.0 < sent < 0:
         return "Peripheral Hit"
-    # Canonical gap bridge: Prom ∈ [2.0, 3), Sent ≤ -2.0, Outlet = 4
-    # This case doesn't qualify for Takedown (needs Prom≥3) or Stinger (needs Outlet≤3)
-    elif prom >= 2.0 and prom < 3.0 and sent <= -2.0 and outlet == 4:
-        return "Stinger"  # Bridge assignment per Ben's guidance
     else:
-        return ""  # True canonical gap (should be rare)
+        return ""  # True canonical gap
 
 
 def assign_leader_modifier(prom: float, sent: float, outlet: float) -> str:
