@@ -169,8 +169,14 @@ def compute_topic_signals(df: pd.DataFrame) -> pd.DataFrame:
     topic_prom, topic_sent = "Topic_Prominence", "Topic_Sentiment"
     vol_cur = len(df_cur)
     vol_prev = len(df_prev)
-    avg_prom_low = _mean_safe(df_cur.loc[df_cur["Outlet score"].isin(LOW_TIER), topic_prom]) if vol_cur else np.nan
-    avg_prom_mh = _mean_safe(df_cur.loc[df_cur["Outlet score"].isin(MID_HIGH_TIER), topic_prom]) if vol_cur else np.nan
+    
+    # Determine outlet score column with fallback
+    outlet_score_col = "Outlet score"
+    if "Outlet score" not in df.columns and "Orchestra_Pub_Tier" in df.columns:
+        outlet_score_col = "Orchestra_Pub_Tier"
+    
+    avg_prom_low = _mean_safe(df_cur.loc[df_cur[outlet_score_col].isin(LOW_TIER), topic_prom]) if vol_cur else np.nan
+    avg_prom_mh = _mean_safe(df_cur.loc[df_cur[outlet_score_col].isin(MID_HIGH_TIER), topic_prom]) if vol_cur else np.nan
     std_prom = _std_safe(df_cur[topic_prom]) if vol_cur else 0.0
     std_sent = _std_safe(df_cur[topic_sent]) if vol_cur else 0.0
 
@@ -181,7 +187,7 @@ def compute_topic_signals(df: pd.DataFrame) -> pd.DataFrame:
         share_no_narr = float(no_narr_mask.mean())
     else:
         share_no_narr = 0.0
-    share_low_tier = float((df_cur["Outlet score"].isin(LOW_TIER)).mean()) if vol_cur else 0.0
+    share_low_tier = float((df_cur[outlet_score_col].isin(LOW_TIER)).mean()) if vol_cur else 0.0
     avg_topic_prom = _mean_safe(df_cur[topic_prom]) if vol_cur else np.nan
 
     # init column (dataset-level attaches as a constant per row; we still store on each row for CSV usability)
@@ -219,6 +225,11 @@ def compute_topic_signals(df: pd.DataFrame) -> pd.DataFrame:
 def compute_narrative_signals(df: pd.DataFrame) -> pd.DataFrame:
     df_cur, df_prev, cur_win, prev_win = _window_splits(df)
     narratives = _get_narratives(df)
+    
+    # Determine outlet score column with fallback
+    outlet_score_col = "Outlet score"
+    if "Outlet score" not in df.columns and "Orchestra_Pub_Tier" in df.columns:
+        outlet_score_col = "Orchestra_Pub_Tier"
     for n in narratives:
         prom_col, sent_col = _narr_cols(n)
         outcol = f"Narrative_{n}_Signals"
@@ -278,15 +289,15 @@ def compute_narrative_signals(df: pd.DataFrame) -> pd.DataFrame:
                 overlap_share = float(((df.loc[cur_mask, narr_prom_cols] >= 2.0).sum(axis=1) >= 2).mean())
                 if overlap_share >= 0.30:
                     narr_window_signals.append("Overlapping")
-            avg_prom_low = _mean_safe(df.loc[cur_mask & df["Outlet score"].isin(LOW_TIER), prom_col])
-            avg_prom_mh = _mean_safe(df.loc[cur_mask & df["Outlet score"].isin(MID_HIGH_TIER), prom_col])
+            avg_prom_low = _mean_safe(df.loc[cur_mask & df[outlet_score_col].isin(LOW_TIER), prom_col])
+            avg_prom_mh = _mean_safe(df.loc[cur_mask & df[outlet_score_col].isin(MID_HIGH_TIER), prom_col])
             if (not np.isnan(avg_prom_low)) and (not np.isnan(avg_prom_mh)) and avg_prom_low >= 2.5 and avg_prom_mh < 1.5:
                 narr_window_signals.append("Trade-Locked")
             avg_prom = _mean_safe(df.loc[cur_mask, prom_col])
             if narratives:
                 other_cols = [f"Narrative_{nn}_Prominence" for nn in narratives if nn != n]
                 no_companion_share = float(((df.loc[cur_mask, other_cols] > 0).sum(axis=1) == 0).mean()) if other_cols else 1.0
-                low_tier_share = float((df.loc[cur_mask, "Outlet score"].isin(LOW_TIER)).mean())
+                low_tier_share = float((df.loc[cur_mask, outlet_score_col].isin(LOW_TIER)).mean())
                 if (avg_prom >= 2.5) and (no_companion_share >= 0.30) and (low_tier_share >= 0.60):
                     narr_window_signals.append("Coverage Split")
 
@@ -346,6 +357,11 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
     df_cur, df_prev, cur_win, prev_win = _window_splits(df)
     entities = _get_entities(df)
     narratives = _get_narratives(df)
+    
+    # Determine outlet score column with fallback
+    outlet_score_col = "Outlet score"
+    if "Outlet score" not in df.columns and "Orchestra_Pub_Tier" in df.columns:
+        outlet_score_col = "Orchestra_Pub_Tier"
 
     # Precompute narrative gaining prominence flags
     narr_gain: dict[str, bool] = {}
@@ -384,7 +400,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
 
     # Iterate rows
     for idx, row in df.iterrows():
-        outlet = int(row.get("Outlet score", 0) or 0)
+        outlet = int(row.get(outlet_score_col, 0) or 0)
         recency = int(pd.Timestamp(row.get("Date")).value) if pd.notna(row.get("Date")) else 0
 
         # Peer cache for the row
