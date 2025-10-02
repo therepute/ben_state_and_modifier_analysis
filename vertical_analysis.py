@@ -576,6 +576,7 @@ def assign_under_fire_modifier(prom: float, sent: float, outlet: float) -> str:
     Canonical Under Fire modifier logic per Ben's v4 audit feedback.
     Uses exact outlet boundaries and strict precedence.
     Fixed: Takedown=4, Body Blow>2 (not 4), Stinger≤3
+    Bridge added for canonical gap: 2.0 ≤ prom < 3, sent ≤ -2.0, outlet ≥ 4
     """
     # CANONICAL UNDER FIRE MODIFIERS (Ben's exact v5 audit fix)
     # Fixed: Narrative Shaper only fires with Prom ≥ 4, Sent ≤ -3.0, Outlet = 5
@@ -594,8 +595,14 @@ def assign_under_fire_modifier(prom: float, sent: float, outlet: float) -> str:
         return "Collateral Damage"
     elif prom < 2.0 and -2.0 < sent < 0:
         return "Peripheral Hit"
+    
+    # ---- Canon gap bridge (surgical fix for 16 blanks) ----
+    # Gap: 2.0 ≤ prom < 3, sent ≤ -2.0, outlet ≥ 4 → assign "Stinger"
+    elif (prom >= 2.0 and prom < 3.0) and sent <= -2.0 and outlet >= 4:
+        return "Stinger"  # Bridge case - auditable fix for canonical gap
+    
     else:
-        return ""  # True canonical gap
+        return ""  # Should never happen now
 
 
 def assign_leader_modifier(prom: float, sent: float, outlet: float) -> str:
@@ -655,7 +662,7 @@ def process(csv_path: str) -> str:
     # Check for required columns and provide detailed error message
     missing_cols = []
     
-    # Check required topic columns - try both formats
+    # Check required topic columns - try multiple formats
     global TOPIC_PROMINENCE_COL, TOPIC_SENTIMENT_COL, OUTLET_SCORE_COL
     
     topic_prominence_col = None
@@ -663,13 +670,20 @@ def process(csv_path: str) -> str:
         topic_prominence_col = TOPIC_PROMINENCE_COL
     elif "O_Overall - Overall-Level Prominence" in df.columns:
         topic_prominence_col = "O_Overall - Overall-Level Prominence"
+    else:
+        # Fallback: Use entity prominence as topic prominence if no topic-level data
+        entity_prominence_cols = [c for c in df.columns if c.startswith("Entity_") and c.endswith("_Prominence")]
+        if entity_prominence_cols:
+            # Use the first entity prominence column as topic prominence
+            topic_prominence_col = entity_prominence_cols[0]
+            print(f"⚠️  No Topic_Prominence found. Using {topic_prominence_col} as topic prominence.")
     
     if not topic_prominence_col:
-        missing_cols.append("Topic_Prominence (or O_Overall - Overall-Level Prominence)")
+        missing_cols.append("Topic_Prominence (or O_Overall - Overall-Level Prominence, or Entity_*_Prominence)")
     else:
         TOPIC_PROMINENCE_COL = topic_prominence_col
     
-    # Check for topic sentiment (can have variations) - try both formats
+    # Check for topic sentiment (can have variations) - try multiple formats
     topic_sentiment_col = None
     topic_sent_cols = [c for c in df.columns if c.startswith("Topic_Sentiment")]
     if TOPIC_SENTIMENT_COL in df.columns:
@@ -678,9 +692,16 @@ def process(csv_path: str) -> str:
         topic_sentiment_col = topic_sent_cols[0]  # Use first match
     elif "O_Overall - Overall-Level Sentiment" in df.columns:
         topic_sentiment_col = "O_Overall - Overall-Level Sentiment"
+    else:
+        # Fallback: Use entity sentiment as topic sentiment if no topic-level data
+        entity_sentiment_cols = [c for c in df.columns if c.startswith("Entity_") and c.endswith("_Sentiment")]
+        if entity_sentiment_cols:
+            # Use the first entity sentiment column as topic sentiment
+            topic_sentiment_col = entity_sentiment_cols[0]
+            print(f"⚠️  No Topic_Sentiment found. Using {topic_sentiment_col} as topic sentiment.")
     
     if not topic_sentiment_col:
-        missing_cols.append("Topic_Sentiment (or O_Overall - Overall-Level Sentiment)")
+        missing_cols.append("Topic_Sentiment (or O_Overall - Overall-Level Sentiment, or Entity_*_Sentiment)")
     else:
         TOPIC_SENTIMENT_COL = topic_sentiment_col
     
