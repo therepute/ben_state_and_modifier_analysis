@@ -166,7 +166,25 @@ def _count_distinct_publications(rows: pd.DataFrame) -> int:
 # ------------------------------
 def compute_topic_signals(df: pd.DataFrame) -> pd.DataFrame:
     df_cur, df_prev, cur_win, _ = _window_splits(df)
-    topic_prom, topic_sent = "Topic_Prominence", "Topic_Sentiment"
+    
+    # Determine topic prominence and sentiment columns with fallback
+    topic_prom = "Topic_Prominence"
+    topic_sent = "Topic_Sentiment"
+    
+    if "Topic_Prominence" not in df.columns:
+        # Fallback: Use entity prominence as topic prominence if no topic-level data
+        entity_prominence_cols = [c for c in df.columns if c.startswith("Entity_") and c.endswith("_Prominence")]
+        if entity_prominence_cols:
+            topic_prom = entity_prominence_cols[0]
+            print(f"⚠️  No Topic_Prominence found. Using {topic_prom} as topic prominence.")
+    
+    if "Topic_Sentiment" not in df.columns:
+        # Fallback: Use entity sentiment as topic sentiment if no topic-level data
+        entity_sentiment_cols = [c for c in df.columns if c.startswith("Entity_") and c.endswith("_Sentiment")]
+        if entity_sentiment_cols:
+            topic_sent = entity_sentiment_cols[0]
+            print(f"⚠️  No Topic_Sentiment found. Using {topic_sent} as topic sentiment.")
+    
     vol_cur = len(df_cur)
     vol_prev = len(df_prev)
     
