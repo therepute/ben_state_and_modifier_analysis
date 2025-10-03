@@ -170,14 +170,30 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
         for field in required_fields + optional_fields:
             best_match = None
             
-            # Try Format 1: Current format (ignore Super variants - use regular columns only)
+            # Try Format 1: Current format - prioritize Super_Prominence but use regular Sentiment
             prefix_variants = [f"Entity_{company}", f"Enity_{company}"]
             for prefix in prefix_variants:
-                target = f"{prefix}_{field}"
-                match = find_best_column_match(target, columns)
-                if match:
-                    best_match = match
-                    break
+                # For Prominence: try Super variant first, then regular
+                if field == "Prominence":
+                    # Try Super_Prominence first
+                    target = f"{prefix}_Super_{field}"
+                    match = find_best_column_match(target, columns)
+                    if match:
+                        best_match = match
+                        break
+                    # Fallback to regular Prominence
+                    target = f"{prefix}_{field}"
+                    match = find_best_column_match(target, columns)
+                    if match:
+                        best_match = match
+                        break
+                else:
+                    # For all other fields (Sentiment, Description, etc.): use regular only
+                    target = f"{prefix}_{field}"
+                    match = find_best_column_match(target, columns)
+                    if match:
+                        best_match = match
+                        break
             
             # Try Format 2: Orchestra format if not found
             if not best_match and field in ["Prominence", "Sentiment"]:
