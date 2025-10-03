@@ -137,8 +137,18 @@ def _get_narratives(df: pd.DataFrame) -> List[str]:
 
 
 def _get_entities(df: pd.DataFrame) -> List[str]:
+    # Get all Entity_*_Prominence columns, but extract base entity names (ignore Super variants)
     prom_cols = [c for c in df.columns if c.startswith("Entity_") and c.endswith("_Prominence")]
-    return [c.removeprefix("Entity_").removesuffix("_Prominence") for c in prom_cols]
+    entities = []
+    for col in prom_cols:
+        # Extract entity name: Entity_StubHub_Super_Prominence -> StubHub
+        # or Entity_StubHub_Prominence -> StubHub
+        entity_name = col.removeprefix("Entity_").removesuffix("_Prominence")
+        if entity_name.endswith("_Super"):
+            entity_name = entity_name.removesuffix("_Super")
+        if entity_name not in entities:
+            entities.append(entity_name)
+    return entities
 
 
 def _narr_cols(name: str) -> Tuple[str, str]:
