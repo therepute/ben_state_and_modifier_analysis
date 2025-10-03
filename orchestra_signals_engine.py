@@ -158,6 +158,9 @@ def _entity_cols(name: str) -> Tuple[str, str, str, str, str, str]:
 
 
 def _count_distinct_publications(rows: pd.DataFrame) -> int:
+    # Handle missing Publication column gracefully
+    if "Publication" not in rows.columns:
+        return len(rows)  # Fallback: assume each row is a different publication
     return rows["Publication"].dropna().astype(str).nunique()
 
 
@@ -520,7 +523,9 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
                     top_n = narr_sorted[0][0]
                     n_prom_col, n_sent_col = _narr_cols(top_n)
                     cur_mask = (df["Date"] >= cur_win[0]) & (df["Date"] <= cur_win[1]) & (df[n_prom_col] >= 2.0)
-                    slice_cur = df.loc[cur_mask, ["Publication", n_sent_col, e_sent]]
+                    # Handle missing Publication column gracefully
+                    pub_cols = ["Publication"] if "Publication" in df.columns else []
+                    slice_cur = df.loc[cur_mask, pub_cols + [n_sent_col, e_sent]]
                     if len(slice_cur) >= 3:
                         med_es = float(pd.to_numeric(slice_cur[e_sent], errors="coerce").dropna().median()) if not slice_cur.empty else np.nan
                         med_ns = float(pd.to_numeric(slice_cur[n_sent_col], errors="coerce").dropna().median()) if not slice_cur.empty else np.nan
