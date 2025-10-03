@@ -145,10 +145,15 @@ def _narr_cols(name: str) -> Tuple[str, str]:
     return f"Narrative_{name}_Prominence", f"Narrative_{name}_Sentiment"
 
 
-def _entity_cols(name: str) -> Tuple[str, str, str, str, str, str]:
+def _entity_cols(name: str, df: pd.DataFrame) -> Tuple[str, str, str, str, str, str]:
     # returns (prom, sent, qual, state, modifier, signals_colname)
+    # Try Super_Prominence first, fallback to regular Prominence
+    prom_col = f"Entity_{name}_Super_Prominence"
+    if prom_col not in df.columns:
+        prom_col = f"Entity_{name}_Prominence"
+    
     return (
-        f"Entity_{name}_Prominence",
+        prom_col,
         f"Entity_{name}_Sentiment",
         f"Entity_{name}_Quality_Score",
         f"Entity_{name}_State",
@@ -284,18 +289,18 @@ def compute_narrative_signals(df: pd.DataFrame) -> pd.DataFrame:
                 # Captured
                 shares = {}
                 for e in entities:
-                    e_prom = _entity_cols(e)[0]
+                    e_prom = _entity_cols(e, df)[0]
                     shares[e] = float((narr_rows_prom[e_prom] >= 2.5).mean())
                 if shares and max(shares.values()) >= 0.50:
                     narr_window_signals.append("Captured")
                 # Unowned
-                no_owner_share = float(((narr_rows_prom[[_entity_cols(e)[0] for e in entities]] >= 2.5).sum(axis=1) == 0).mean())
+                no_owner_share = float(((narr_rows_prom[[_entity_cols(e, df)[0] for e in entities]] >= 2.5).sum(axis=1) == 0).mean())
                 if no_owner_share >= 0.50:
                     narr_window_signals.append("Unowned")
             # Media-Led on any narrative-present article
             narr_rows_all = df.loc[cur_mask & (df[prom_col] > 0)]
             if not narr_rows_all.empty:
-                media_led_share = float(((narr_rows_all[[_entity_cols(e)[0] for e in entities]] >= 2.5).sum(axis=1) == 0).mean())
+                media_led_share = float(((narr_rows_all[[_entity_cols(e, df)[0] for e in entities]] >= 2.5).sum(axis=1) == 0).mean())
                 if media_led_share >= 0.50:
                     narr_window_signals.append("Media-Led")
 
@@ -397,7 +402,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
     # Per-entity window stats
     stats: dict[str, dict] = {}
     for e in entities:
-        e_prom, e_sent, e_q, e_state, e_mod, e_sig = _entity_cols(e)
+        e_prom, e_sent, e_q, e_state, e_mod, e_sig = _entity_cols(e, df)
         cur_mask = (df["Date"] >= cur_win[0]) & (df["Date"] <= cur_win[1]) & df[e_prom].notna()
         prev_mask = (df["Date"] >= prev_win[0]) & (df["Date"] <= prev_win[1]) & df[e_prom].notna()
         stats[e] = {
@@ -413,7 +418,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
 
     # Ensure signal columns
     for e in entities:
-        sig_col = _entity_cols(e)[5]
+        sig_col = _entity_cols(e, df)[5]
         if sig_col not in df.columns:
             df[sig_col] = [[] for _ in range(len(df))]
         else:
@@ -427,7 +432,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
         # Peer cache for the row
         row_peers = {}
         for p in entities:
-            p_prom, p_sent, p_q, p_state, p_mod, p_sig = _entity_cols(p)
+            p_prom, p_sent, p_q, p_state, p_mod, p_sig = _entity_cols(p, df)
             row_peers[p] = {
                 "prom": float(row.get(p_prom, 0.0) or 0.0),
                 "sent": float(row.get(p_sent, 0.0) or 0.0),
@@ -440,7 +445,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
         row_narr_proms = {n: float(row.get(_narr_cols(n)[0], 0.0) or 0.0) for n in narratives}
 
         for e in entities:
-            e_prom, e_sent, e_q, e_state, e_mod, e_sig = _entity_cols(e)
+            e_prom, e_sent, e_q, e_state, e_mod, e_sig = _entity_cols(e, df)
             prom = float(row.get(e_prom, 0.0) or 0.0)
             sent = float(row.get(e_sent, 0.0) or 0.0)
             mod = str(row.get(e_mod, "")) if e_mod in df.columns else ""
@@ -591,7 +596,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
                     c_mask = (df["Date"] >= cur_win[0]) & (df["Date"] <= cur_win[1]) & (df[n_prom_col] > 0)
                     if c_mask.any():
                         # Vectorized computation over the windowed slice
-                        peer_prom_cols = [_entity_cols(p)[0] for p in entities if p != e]
+                        peer_prom_cols = [_entity_cols(p, df)[0] for p in entities if p != e]
                         cols_to_use = [e_prom] + peer_prom_cols
                         sub = df.loc[c_mask, cols_to_use].copy()
                         # Coerce to numeric to avoid mixed-type issues
