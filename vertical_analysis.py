@@ -132,7 +132,8 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
     company_names = set()
     
     # Format 1: Current format (Entity_Name_Field)
-    entity_pattern_format1 = r'^(?:Enity_|Entity_)([^_]+)_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State|Modifier)$'
+    # Updated to handle Super_Prominence variants by capturing the base entity name
+    entity_pattern_format1 = r'^(?:Enity_|Entity_)([^_]+?)(?:_Super)?_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State|Modifier)$'
     for col in columns:
         match = re.match(entity_pattern_format1, col)
         if match:
@@ -172,11 +173,20 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
             # Try Format 1: Current format
             prefix_variants = [f"Entity_{company}", f"Enity_{company}"]
             for prefix in prefix_variants:
+                # Try regular field first
                 target = f"{prefix}_{field}"
                 match = find_best_column_match(target, columns)
                 if match:
                     best_match = match
                     break
+                
+                # Try Super variant for Prominence only (if regular not found)
+                if field == "Prominence":
+                    target = f"{prefix}_Super_{field}"
+                    match = find_best_column_match(target, columns)
+                    if match:
+                        best_match = match
+                        break
             
             # Try Format 2: Orchestra format if not found
             if not best_match and field in ["Prominence", "Sentiment"]:
