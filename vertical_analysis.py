@@ -115,8 +115,11 @@ def discover_coded_entities_and_narratives(columns: List[str]) -> Tuple[Dict[int
     narrative_mappings = {}
     narrative_precedence = []
     debug_info = {
+        "entity_issues": [],
+        "narrative_issues": [],
         "detected_entities": [],
         "detected_narratives": [],
+        "missing_required": [],
         "successful_mappings": [],
         "format_detected": "Coded format"
     }
