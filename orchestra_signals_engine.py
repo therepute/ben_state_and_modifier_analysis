@@ -286,19 +286,19 @@ def compute_narrative_signals(df: pd.DataFrame) -> pd.DataFrame:
             if std_prom >= 1.0 or std_sent >= 1.5:
                 narr_window_signals.append("Fragmented")
             if narratives:
-                narr_prom_cols = [f"Narrative_{nn}_Prominence" for nn in narratives]
+                narr_prom_cols = [f"O_M_{nn}prom" for nn in narratives]
                 overlap_share = float(((df.loc[cur_mask, narr_prom_cols] >= 2.0).sum(axis=1) >= 2).mean())
                 if overlap_share >= 0.30:
                     narr_window_signals.append("Overlapping")
-            avg_prom_low = _mean_safe(df.loc[cur_mask & df["Outlet score"].isin(LOW_TIER), prom_col])
-            avg_prom_mh = _mean_safe(df.loc[cur_mask & df["Outlet score"].isin(MID_HIGH_TIER), prom_col])
+            avg_prom_low = _mean_safe(df.loc[cur_mask & df["Orchestra_Pub_Tier"].isin(LOW_TIER), prom_col])
+            avg_prom_mh = _mean_safe(df.loc[cur_mask & df["Orchestra_Pub_Tier"].isin(MID_HIGH_TIER), prom_col])
             if (not np.isnan(avg_prom_low)) and (not np.isnan(avg_prom_mh)) and avg_prom_low >= 2.5 and avg_prom_mh < 1.5:
                 narr_window_signals.append("Trade-Locked")
             avg_prom = _mean_safe(df.loc[cur_mask, prom_col])
             if narratives:
-                other_cols = [f"Narrative_{nn}_Prominence" for nn in narratives if nn != n]
+                other_cols = [f"O_M_{nn}prom" for nn in narratives if nn != n]
                 no_companion_share = float(((df.loc[cur_mask, other_cols] > 0).sum(axis=1) == 0).mean()) if other_cols else 1.0
-                low_tier_share = float((df.loc[cur_mask, "Outlet score"].isin(LOW_TIER)).mean())
+                low_tier_share = float((df.loc[cur_mask, "Orchestra_Pub_Tier"].isin(LOW_TIER)).mean())
                 if (avg_prom >= 2.5) and (no_companion_share >= 0.30) and (low_tier_share >= 0.60):
                     narr_window_signals.append("Coverage Split")
 
@@ -396,7 +396,7 @@ def compute_entity_signals(df: pd.DataFrame) -> pd.DataFrame:
 
     # Iterate rows
     for idx, row in df.iterrows():
-        outlet = int(row.get("Outlet score", 0) or 0)
+        outlet = int(row.get("Orchestra_Pub_Tier", 0) or 0)
         recency = int(pd.Timestamp(row.get("Date")).value) if pd.notna(row.get("Date")) else 0
 
         # Peer cache for the row
