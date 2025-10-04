@@ -165,7 +165,7 @@ def _entity_cols(entity_id: int) -> Tuple[str, str, str, str, str, str]:
         f"{entity_id}_Orchestra_Quality_Score",
         f"Entity_{entity_id}_State",
         f"Entity_{entity_id}_Modifier",
-        f"Entity_{entity_id}_Signals",
+        f"{entity_id}_C_signals",
     )
 
 
@@ -197,15 +197,15 @@ def compute_topic_signals(df: pd.DataFrame) -> pd.DataFrame:
     avg_topic_prom = _mean_safe(df_cur[topic_prom]) if vol_cur else np.nan
 
     # init column (dataset-level attaches as a constant per row; we still store on each row for CSV usability)
-    if "Topic_Signals" not in df.columns:
-        df["Topic_Signals"] = [[] for _ in range(len(df))]
+    if "O_signals" not in df.columns:
+        df["O_signals"] = [[] for _ in range(len(df))]
     else:
-        df["Topic_Signals"] = df["Topic_Signals"].apply(lambda v: v if isinstance(v, list) else ([] if pd.isna(v) else [str(v)]))
+        df["O_signals"] = df["O_signals"].apply(lambda v: v if isinstance(v, list) else ([] if pd.isna(v) else [str(v)]))
 
     # Article-level Hot retained, but other topic signals are dataset-level per window
     hot_mask = (df[topic_prom] >= 3.5) & (df[topic_sent] >= 3.0)
     if hot_mask.any():
-        df.loc[hot_mask, "Topic_Signals"] = df.loc[hot_mask, "Topic_Signals"].apply(lambda s: s + ["Hot"])
+        df.loc[hot_mask, "O_signals"] = df.loc[hot_mask, "O_signals"].apply(lambda s: s + ["Hot"])
 
     # Windowed signals (copy to all rows for convenience)
     topic_window_signals: List[str] = []
@@ -221,7 +221,7 @@ def compute_topic_signals(df: pd.DataFrame) -> pd.DataFrame:
         topic_window_signals.append("Coverage Split")
     if topic_window_signals:
         const = topic_window_signals
-        df["Topic_Signals"] = df["Topic_Signals"].apply(lambda s: s + const)
+        df["O_signals"] = df["O_signals"].apply(lambda s: s + const)
     return df
 
 
@@ -233,7 +233,7 @@ def compute_narrative_signals(df: pd.DataFrame) -> pd.DataFrame:
     narratives = _get_narratives(df)
     for n in narratives:
         prom_col, sent_col = _narr_cols(n)
-        outcol = f"Narrative_{n}_Signals"
+        outcol = f"O_M_{n}signals"
         if outcol not in df.columns:
             df[outcol] = [[] for _ in range(len(df))]
         else:
@@ -635,7 +635,7 @@ def apply_all_signals(df: pd.DataFrame, as_of: str | None = None) -> pd.DataFram
     # Entity
     df = compute_entity_signals(df)
     # Normalize list columns to pipe-joined strings for CSV
-    list_cols = [c for c in df.columns if c.endswith("_Signals") or c == "Topic_Signals"]
+    list_cols = [c for c in df.columns if c.endswith("signals") or c == "O_signals"]
     for c in list_cols:
         df[c] = df[c].apply(lambda v: ", ".join(v) if isinstance(v, list) else (v if isinstance(v, str) else ""))
     return df
