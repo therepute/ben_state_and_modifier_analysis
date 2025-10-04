@@ -31,12 +31,12 @@ class EntityColumnMapping:
 # Constants and configuration
 # -------------------------------
 
-TOPIC_PROMINENCE_COL = "Topic_Prominence"
-TOPIC_SENTIMENT_COL = "Topic_Sentiment"
+TOPIC_PROMINENCE_COL = "O_Sent"  # Using coded topic column
+TOPIC_SENTIMENT_COL = "O_Sent"   # Using coded topic column
 TOPIC_STATE_COL = "Topic_State"
 
-OUTLET_SCORE_COL = "Outlet score"
-PUB_TIER_COL = "Pub_Tier"
+OUTLET_SCORE_COL = "Orchestra_Pub_Tier"  # Using coded outlet score
+PUB_TIER_COL = "Orchestra_Pub_Tier"      # Using coded pub tier
 BODY_LENGTH_COL = "Body - Length - Words"
 
 # These will be dynamically populated from CSV headers
