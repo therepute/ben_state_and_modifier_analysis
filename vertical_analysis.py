@@ -150,8 +150,8 @@ def discover_coded_entities_and_narratives(columns: List[str]) -> Tuple[Dict[int
                 prominence=super_prom_col if super_prom_col in columns else prom_col,
                 sentiment=sent_col,
                 description=desc_col if desc_col in columns else None,
-                state=state_col if state_col in columns else f"Entity_{entity_id}_State",
-                modifier=modifier_col if modifier_col in columns else f"Entity_{entity_id}_Modifier",
+                state=state_col if state_col in columns else f"{entity_id}_C_State",
+                modifier=modifier_col if modifier_col in columns else f"{entity_id}_C_Modifier",
             )
             debug_info["successful_mappings"].append(f"✅ Entity_{entity_id}: {entity_mappings[entity_id].prominence}, {entity_mappings[entity_id].sentiment}")
     
@@ -174,10 +174,10 @@ def discover_coded_entities_and_narratives(columns: List[str]) -> Tuple[Dict[int
         # Check if required columns exist
         if prom_col in columns and sent_col in columns:
             narrative_mappings[narrative_id] = NarrativeColumnMapping(
-                description=desc_col if desc_col in columns else f"Narrative_{narrative_id}_Description",
+                description=desc_col if desc_col in columns else f"O_M_{narrative_id}desc",
                 prominence=prom_col,
                 sentiment=sent_col,
-                state=state_col if state_col in columns else f"Narrative_{narrative_id}_State",
+                state=state_col if state_col in columns else f"O_M_{narrative_id}state",
             )
             narrative_precedence.append(narrative_id)
             debug_info["successful_mappings"].append(f"✅ Narrative_{narrative_id}: {narrative_mappings[narrative_id].prominence}, {narrative_mappings[narrative_id].sentiment}")
@@ -613,15 +613,15 @@ def process(csv_path: str) -> str:
                 df[TOPIC_STATE_COL] = df["Topic_Sate"]
 
     # Derived presence and normalized sentiment for topic
-    df["Topic_Present"] = df[TOPIC_PROMINENCE_COL].apply(coerce_float).apply(lambda x: is_present(x))
-    df["Topic_Sentiment_Normalized"] = (
+    df["O_Present"] = df[TOPIC_PROMINENCE_COL].apply(coerce_float).apply(lambda x: is_present(x))
+    df["O_Sent_Normalized"] = (
         df[TOPIC_SENTIMENT_COL].apply(coerce_float).apply(normalize_sentiment_weak_collapse)
     )
 
     # Any narrative present?
     for key, mapping in NARRATIVE_MAPPINGS.items():
-        present_col = f"{key}_Present"
-        sent_norm_col = f"{key}_Sentiment_Normalized"
+        present_col = f"O_M_{key}present"
+        sent_norm_col = f"O_M_{key}sent_norm"
         df[present_col] = df[mapping.prominence].apply(coerce_float).apply(lambda x: is_present(x))
         df[sent_norm_col] = df[mapping.sentiment].apply(coerce_float).apply(normalize_sentiment_weak_collapse)
 
@@ -641,7 +641,7 @@ def process(csv_path: str) -> str:
 
         df[mapping.state] = df.apply(_narr_state_row, axis=1)
 
-    df["Any_Narrative_Present"] = (
+    df["O_Any_Narrative_Present"] = (
         df[[NARRATIVE_MAPPINGS[k].prominence for k in NARRATIVE_TIE_PRECEDENCE]]
         .apply(lambda s: s.map(coerce_float))
         .gt(0.0)
@@ -680,14 +680,14 @@ def process(csv_path: str) -> str:
 
     # Central narrative for Off-Stage modifiers
     central = df.apply(pick_central_narrative, axis=1, result_type="expand")
-    df["Central_Narrative_Key"] = central[0]
-    df["Central_Narrative_Prominence"] = central[1]
-    df["Central_Narrative_Sentiment"] = central[2]
+    df["O_Central_Key"] = central[0]
+    df["O_Central_Prom"] = central[1]
+    df["O_Central_Sent"] = central[2]
 
     # Assign entity states and modifiers
     for entity_id, mapping in ENTITY_MAPPINGS.items():
-        present_col = f"Entity_{entity_id}_Present"
-        sent_norm_col = f"Entity_{entity_id}_Sentiment_Normalized"
+        present_col = f"{entity_id}_C_Present"
+        sent_norm_col = f"{entity_id}_C_Sent_Normalized"
 
         df[present_col] = df[mapping.prominence].apply(coerce_float).apply(lambda x: is_present(x))
         df[sent_norm_col] = df[mapping.sentiment].apply(coerce_float).apply(normalize_sentiment_weak_collapse)
@@ -815,11 +815,11 @@ def process(csv_path: str) -> str:
     # 2. ADD MISSING PROMINENCE COLUMNS (Ben's audit feedback)
     # Add Entity_*_Prominence columns for canonical compliance
     for entity_id, mapping in ENTITY_MAPPINGS.items():
-        prominence_col = f"Entity_{entity_id}_Prominence"
+        prominence_col = f"{entity_id}_C_Prominence"
         if prominence_col not in df.columns:
             # Generate prominence column based on existing data patterns
             # Use Entity_*_Present (boolean) and Entity_*_Sentiment_Normalized to infer prominence
-            present_col = f"Entity_{entity_id}_Present"
+            present_col = f"{entity_id}_C_Present"
             if present_col in df.columns:
                 # Simple heuristic: if present=True, use sentiment magnitude to estimate prominence
                 # This is a rough approximation until proper prominence data is available
@@ -828,7 +828,7 @@ def process(csv_path: str) -> str:
                         return 0.0  # Not present = 0 prominence
                     
                     # Use sentiment magnitude as rough prominence proxy
-                    sent_normalized = row.get(f"Entity_{entity_id}_Sentiment_Normalized", 0.0)
+                    sent_normalized = row.get(f"{entity_id}_C_Sent_Normalized", 0.0)
                     if pd.isna(sent_normalized):
                         return 1.0  # Present but unknown sentiment = minimal prominence
                     

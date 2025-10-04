@@ -163,8 +163,8 @@ def _entity_cols(entity_id: int) -> Tuple[str, str, str, str, str, str]:
         f"{entity_id}_C_Prom",
         f"{entity_id}_C_Sent", 
         f"{entity_id}_Orchestra_Quality_Score",
-        f"Entity_{entity_id}_State",
-        f"Entity_{entity_id}_Modifier",
+        f"{entity_id}_C_State",
+        f"{entity_id}_C_Modifier",
         f"{entity_id}_C_signals",
     )
 
