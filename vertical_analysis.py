@@ -40,9 +40,9 @@ PUB_TIER_COL = "Pub_Tier"
 BODY_LENGTH_COL = "Body - Length - Words"
 
 # These will be dynamically populated from CSV headers
-NARRATIVE_TIE_PRECEDENCE: List[str] = []
-NARRATIVE_MAPPINGS: Dict[str, NarrativeColumnMapping] = {}
-ENTITY_MAPPINGS: Dict[str, EntityColumnMapping] = {}
+NARRATIVE_TIE_PRECEDENCE: List[int] = []
+NARRATIVE_MAPPINGS: Dict[int, NarrativeColumnMapping] = {}
+ENTITY_MAPPINGS: Dict[int, EntityColumnMapping] = {}
 
 # Store the last mapping preview for web display
 LAST_MAPPING_PREVIEW: str = ""
@@ -99,17 +99,13 @@ def find_best_column_match(target: str, available_columns: List[str]) -> str:
     return None
 
 
-def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, EntityColumnMapping], Dict[str, NarrativeColumnMapping], List[str], Dict[str, List[str]]]:
+def discover_coded_entities_and_narratives(columns: List[str]) -> Tuple[Dict[int, EntityColumnMapping], Dict[int, NarrativeColumnMapping], List[int], Dict[str, List[str]]]:
     """
-    Auto-detect companies and narratives from CSV column headers with enhanced error reporting.
+    Discover entities and narratives using simple coded column patterns.
     
-    Pattern Recognition - Format 1 (Current):
-    - Companies: Entity_{CompanyName}_Prominence/Sentiment/Description/Quality_Score/State/Modifier
-    - Narratives: Narrative_{MessageName}_Prominence/Sentiment/Description/Quality_Score/State
-    
-    Pattern Recognition - Format 2 (Orchestra Ready):
-    - Companies: {N}_{CompanyName} - Company-Level Prominence/Sentiment
-    - Narratives: O_Overall - Message {N} Prominence ({Description})/Sentiment ({Description})
+    Pattern Recognition:
+    - Entities: {N}_C_Desc, {N}_C_Prom, {N}_C_Sent, {N}_Orchestra_Quality_Score, {N}_Orchestra_Super_Prominence
+    - Narratives: O_M_{N}desc, O_M_{N}prom, O_M_{N}sent, O_M_{N}state
     
     Returns: (entity_mappings, narrative_mappings, narrative_precedence, debug_info)
     """
@@ -119,169 +115,69 @@ def auto_detect_companies_and_narratives(columns: List[str]) -> Tuple[Dict[str, 
     narrative_mappings = {}
     narrative_precedence = []
     debug_info = {
-        "entity_issues": [],
-        "narrative_issues": [],
         "detected_entities": [],
         "detected_narratives": [],
-        "missing_required": [],
         "successful_mappings": [],
-        "format_detected": "unknown"
+        "format_detected": "Coded format"
     }
     
-    # Detect companies from BOTH formats simultaneously
-    company_names = set()
-    
-    # Format 1: Current format (Entity_Name_Field)
-    entity_pattern_format1 = r'^(?:Enity_|Entity_)([^_]+)_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State|Modifier)$'
+    # Discover entity indices (1, 2, 3, etc.)
+    entity_indices = set()
     for col in columns:
-        match = re.match(entity_pattern_format1, col)
+        match = re.match(r'^(\d+)_C_', col)
         if match:
-            company_names.add(match.group(1))
+            entity_indices.add(int(match.group(1)))
     
-    # Format 2: Orchestra ready (Number_Name - Company-Level Field)
-    entity_pattern_format2 = r'^(\d+)_([^-\s]+)\s*-\s*Company-Level\s+(?:Prominence|Sentiment)'
-    for col in columns:
-        match = re.match(entity_pattern_format2, col)
-        if match:
-            company_names.add(match.group(2))
+    debug_info["detected_entities"] = [f"Entity_{i}" for i in sorted(entity_indices)]
     
-    # Report detected formats
-    format1_count = len([col for col in columns if re.match(entity_pattern_format1, col)])
-    format2_count = len([col for col in columns if re.match(entity_pattern_format2, col)])
-    
-    if format1_count > 0 and format2_count > 0:
-        debug_info["format_detected"] = "Both formats detected"
-    elif format1_count > 0:
-        debug_info["format_detected"] = "Current format only"
-    elif format2_count > 0:
-        debug_info["format_detected"] = "Orchestra format only"
-    else:
-        debug_info["format_detected"] = "No companies detected"
-    
-    debug_info["detected_entities"] = sorted(list(company_names))
-    
-    # Build entity mappings with error tracking
-    for company in sorted(company_names):
-        required_fields = ["Prominence", "Sentiment"]
-        optional_fields = ["Description", "Quality_Score", "State", "Modifier"]
-        actual_mappings = {}
+    # Build entity mappings
+    for entity_id in sorted(entity_indices):
+        desc_col = f"{entity_id}_C_Desc"
+        prom_col = f"{entity_id}_C_Prom"
+        sent_col = f"{entity_id}_C_Sent"
+        quality_col = f"{entity_id}_Orchestra_Quality_Score"
+        super_prom_col = f"{entity_id}_Orchestra_Super_Prominence"
+        state_col = f"{entity_id}_C_State"
+        modifier_col = f"{entity_id}_C_Modifier"
         
-        for field in required_fields + optional_fields:
-            best_match = None
-            
-            # Try Format 1: Current format
-            prefix_variants = [f"Entity_{company}", f"Enity_{company}"]
-            for prefix in prefix_variants:
-                target = f"{prefix}_{field}"
-                match = find_best_column_match(target, columns)
-                if match:
-                    best_match = match
-                    break
-            
-            # Try Format 2: Orchestra format if not found
-            if not best_match and field in ["Prominence", "Sentiment"]:
-                company_pattern = rf'^(\d+)_{re.escape(company)}\s*-\s*Company-Level\s+{field}$'
-                for col in columns:
-                    if re.match(company_pattern, col):
-                        best_match = col
-                        break
-            
-            if best_match:
-                actual_mappings[field.lower()] = best_match
-            elif field in required_fields:
-                tried_patterns = [f'{p}_{field}' for p in prefix_variants] + [f'N_{company} - Company-Level {field}']
-                debug_info["entity_issues"].append(f"❌ {company}: Missing required field '{field}' (tried {tried_patterns})")
-        
-        # Only create mapping if we have required fields
-        if all(field.lower() in actual_mappings for field in required_fields):
-            # Determine if this is an Orchestra format entity
-            is_orchestra_entity = re.match(r'^\d+_', actual_mappings["prominence"]) is not None
-            
-            entity_mappings[company] = EntityColumnMapping(
-                quality_score=actual_mappings.get("quality_score", f"Entity_{company}_Quality_Score"),
-                prominence=actual_mappings["prominence"],
-                sentiment=actual_mappings["sentiment"], 
-                description=actual_mappings.get("description", f"Entity_{company}_Description"),
-                state=actual_mappings.get("state", f"Entity_{company}_State"),
-                modifier=actual_mappings.get("modifier", f"Entity_{company}_Modifier"),
+        # Check if required columns exist
+        if prom_col in columns and sent_col in columns:
+            entity_mappings[entity_id] = EntityColumnMapping(
+                quality_score=quality_col if quality_col in columns else None,
+                prominence=super_prom_col if super_prom_col in columns else prom_col,
+                sentiment=sent_col,
+                description=desc_col if desc_col in columns else None,
+                state=state_col if state_col in columns else f"Entity_{entity_id}_State",
+                modifier=modifier_col if modifier_col in columns else f"Entity_{entity_id}_Modifier",
             )
-            debug_info["successful_mappings"].append(f"✅ {company}: {actual_mappings['prominence']}, {actual_mappings['sentiment']}")
-        else:
-            debug_info["missing_required"].append(f"Entity {company}")
+            debug_info["successful_mappings"].append(f"✅ Entity_{entity_id}: {entity_mappings[entity_id].prominence}, {entity_mappings[entity_id].sentiment}")
     
-    # Pattern 2: Extract narratives/messages from BOTH formats
-    message_names = set()
-    
-    # Format 1: Current Narrative columns
-    narrative_pattern_format1 = r'^(?:Narrtaive_|Narrative_)([^_]+)_(?:Prominence|Sentiment|Description|Quality_Score|Qulaity_Score|State)$'
+    # Discover narrative indices (1, 2, 3, etc.)
+    narrative_indices = set()
     for col in columns:
-        match = re.match(narrative_pattern_format1, col)
+        match = re.match(r'^O_M_(\d+)', col)
         if match:
-            message_names.add(match.group(1))
+            narrative_indices.add(int(match.group(1)))
     
-    # Format 2: Orchestra format - O_Overall - Message N Prominence/Sentiment (Description)
-    narrative_pattern_format2 = r'^O_Overall\s*-\s*Message\s+(\d+)\s+(?:Prominence|Sentiment)\s*\(([^)]+)\)$'
-    for col in columns:
-        match = re.match(narrative_pattern_format2, col)
-        if match:
-            description = match.group(2).strip()
-            message_names.add(description)  # Use exact description as narrative name
+    debug_info["detected_narratives"] = [f"Narrative_{i}" for i in sorted(narrative_indices)]
     
-    debug_info["detected_narratives"] = sorted(list(message_names))
-    
-    # Build narrative mappings with error tracking
-    for message in sorted(message_names):
-        required_fields = ["Prominence", "Sentiment"]
-        optional_fields = ["Description", "Quality_Score", "State"]
+    # Build narrative mappings
+    for narrative_id in sorted(narrative_indices):
+        desc_col = f"O_M_{narrative_id}desc"
+        prom_col = f"O_M_{narrative_id}prom"
+        sent_col = f"O_M_{narrative_id}sent"
+        state_col = f"O_M_{narrative_id}state"
         
-        prefix_variants = [f"Narrative_{message}", f"Narrtaive_{message}"]
-        actual_mappings = {}
-        
-        for field in required_fields + optional_fields:
-            best_match = None
-            
-            # Try Format 1: Current Narrative format
-            for prefix in prefix_variants:
-                target = f"{prefix}_{field}"
-                match = find_best_column_match(target, columns)
-                if match:
-                    best_match = match
-                    break
-            
-            # Try Format 2: Orchestra format if not found
-            if not best_match and field in ["Prominence", "Sentiment"]:
-                orchestra_pattern = rf'^O_Overall\s*-\s*Message\s+\d+\s+{field}\s*\({re.escape(message)}\)$'
-                for col in columns:
-                    if re.match(orchestra_pattern, col):
-                        best_match = col
-                        break
-            
-            if best_match:
-                actual_mappings[field.lower()] = best_match
-            elif field in required_fields:
-                tried_patterns = [f'{p}_{field}' for p in prefix_variants] + [f'O_Overall - Message N {field} ({message})']
-                debug_info["narrative_issues"].append(f"❌ {message}: Missing required field '{field}' (tried {tried_patterns})")
-        
-        # Only create mapping if we have required fields
-        if all(field.lower() in actual_mappings for field in required_fields):
-            # Determine the narrative key based on which format was detected
-            is_orchestra_narrative = actual_mappings["prominence"].startswith("O_Overall")
-            
-            if is_orchestra_narrative:
-                narrative_key = message  # Use exact name for Orchestra format
-            else:
-                narrative_key = f"Narrative_{message}"  # Use prefixed name for current format
-            
-            narrative_mappings[narrative_key] = NarrativeColumnMapping(
-                description=actual_mappings.get("description", f"Narrative_{message}_Description" if not is_orchestra_narrative else ""),
-                prominence=actual_mappings["prominence"],
-                sentiment=actual_mappings["sentiment"],
-                state=actual_mappings.get("state", f"Narrative_{message}_State" if not is_orchestra_narrative else ""),
+        # Check if required columns exist
+        if prom_col in columns and sent_col in columns:
+            narrative_mappings[narrative_id] = NarrativeColumnMapping(
+                description=desc_col if desc_col in columns else f"Narrative_{narrative_id}_Description",
+                prominence=prom_col,
+                sentiment=sent_col,
+                state=state_col if state_col in columns else f"Narrative_{narrative_id}_State",
             )
-            narrative_precedence.append(narrative_key)
-            debug_info["successful_mappings"].append(f"✅ {message}: {actual_mappings['prominence']}, {actual_mappings['sentiment']}")
-        else:
-            debug_info["missing_required"].append(f"Narrative {message}")
+            narrative_precedence.append(narrative_id)
+            debug_info["successful_mappings"].append(f"✅ Narrative_{narrative_id}: {narrative_mappings[narrative_id].prominence}, {narrative_mappings[narrative_id].sentiment}")
     
     return entity_mappings, narrative_mappings, narrative_precedence, debug_info
 
@@ -298,7 +194,7 @@ def initialize_mappings_from_csv(csv_path: str) -> str:
     columns = df_header.columns.tolist()
     
     # Auto-detect and populate global mappings
-    ENTITY_MAPPINGS, NARRATIVE_MAPPINGS, NARRATIVE_TIE_PRECEDENCE, debug_info = auto_detect_companies_and_narratives(columns)
+    ENTITY_MAPPINGS, NARRATIVE_MAPPINGS, NARRATIVE_TIE_PRECEDENCE, debug_info = discover_coded_entities_and_narratives(columns)
     
     # Build preview text for web display
     preview_lines = []
@@ -692,7 +588,7 @@ def process(csv_path: str) -> str:
             missing_cols.append(mapping.sentiment)
     
     # Check required entity columns
-    for entity_name, mapping in ENTITY_MAPPINGS.items():
+    for entity_id, mapping in ENTITY_MAPPINGS.items():
         if mapping.prominence not in df.columns:
             missing_cols.append(mapping.prominence)
         if mapping.sentiment not in df.columns:
@@ -814,9 +710,9 @@ def process(csv_path: str) -> str:
     df["Central_Narrative_Sentiment"] = central[2]
 
     # Assign entity states and modifiers
-    for entity_name, mapping in ENTITY_MAPPINGS.items():
-        present_col = f"Entity_{entity_name}_Present"
-        sent_norm_col = f"Entity_{entity_name}_Sentiment_Normalized"
+    for entity_id, mapping in ENTITY_MAPPINGS.items():
+        present_col = f"Entity_{entity_id}_Present"
+        sent_norm_col = f"Entity_{entity_id}_Sentiment_Normalized"
 
         df[present_col] = df[mapping.prominence].apply(coerce_float).apply(lambda x: is_present(x))
         df[sent_norm_col] = df[mapping.sentiment].apply(coerce_float).apply(normalize_sentiment_weak_collapse)
@@ -863,9 +759,9 @@ def process(csv_path: str) -> str:
             
             # 2. Count peers with Prominence >= 2.0 (OTHER entities, not current one)
             peer_count_prom_ge_2 = 0
-            current_entity_name = entity_name  # From the outer loop
-            for other_entity_name, other_mapping in ENTITY_MAPPINGS.items():
-                if other_entity_name != current_entity_name:
+            current_entity_id = entity_id  # From the outer loop
+            for other_entity_id, other_mapping in ENTITY_MAPPINGS.items():
+                if other_entity_id != current_entity_id:
                     other_prom = coerce_float(row.get(other_mapping.prominence, 0.0))
                     if other_prom >= 2.0:
                         peer_count_prom_ge_2 += 1
@@ -937,18 +833,18 @@ def process(csv_path: str) -> str:
         return state_str
     
     # Apply state normalization to all entity state columns
-    for entity_name, mapping in ENTITY_MAPPINGS.items():
+    for entity_id, mapping in ENTITY_MAPPINGS.items():
         if mapping.state in df.columns:
             df[mapping.state] = df[mapping.state].apply(normalize_state)
     
     # 2. ADD MISSING PROMINENCE COLUMNS (Ben's audit feedback)
     # Add Entity_*_Prominence columns for canonical compliance
-    for entity_name, mapping in ENTITY_MAPPINGS.items():
-        prominence_col = f"Entity_{entity_name}_Prominence"
+    for entity_id, mapping in ENTITY_MAPPINGS.items():
+        prominence_col = f"Entity_{entity_id}_Prominence"
         if prominence_col not in df.columns:
             # Generate prominence column based on existing data patterns
             # Use Entity_*_Present (boolean) and Entity_*_Sentiment_Normalized to infer prominence
-            present_col = f"Entity_{entity_name}_Present"
+            present_col = f"Entity_{entity_id}_Present"
             if present_col in df.columns:
                 # Simple heuristic: if present=True, use sentiment magnitude to estimate prominence
                 # This is a rough approximation until proper prominence data is available
@@ -957,7 +853,7 @@ def process(csv_path: str) -> str:
                         return 0.0  # Not present = 0 prominence
                     
                     # Use sentiment magnitude as rough prominence proxy
-                    sent_normalized = row.get(f"Entity_{entity_name}_Sentiment_Normalized", 0.0)
+                    sent_normalized = row.get(f"Entity_{entity_id}_Sentiment_Normalized", 0.0)
                     if pd.isna(sent_normalized):
                         return 1.0  # Present but unknown sentiment = minimal prominence
                     

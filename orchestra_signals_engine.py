@@ -131,29 +131,41 @@ def _iqr_safe(series: pd.Series) -> float:
     return float(q3 - q1)
 
 
-def _get_narratives(df: pd.DataFrame) -> List[str]:
-    prom_cols = [c for c in df.columns if c.startswith("Narrative_") and c.endswith("_Prominence")]
-    return [c.removeprefix("Narrative_").removesuffix("_Prominence") for c in prom_cols]
+def _get_narratives(df: pd.DataFrame) -> List[int]:
+    """Discover narrative IDs from coded column patterns like O_M_1prom, O_M_2prom, etc."""
+    import re
+    narrative_ids = set()
+    for col in df.columns:
+        match = re.match(r'^O_M_(\d+)', col)
+        if match:
+            narrative_ids.add(int(match.group(1)))
+    return sorted(narrative_ids)
 
 
-def _get_entities(df: pd.DataFrame) -> List[str]:
-    prom_cols = [c for c in df.columns if c.startswith("Entity_") and c.endswith("_Prominence")]
-    return [c.removeprefix("Entity_").removesuffix("_Prominence") for c in prom_cols]
+def _get_entities(df: pd.DataFrame) -> List[int]:
+    """Discover entity IDs from coded column patterns like 1_C_Prom, 2_C_Prom, etc."""
+    import re
+    entity_ids = set()
+    for col in df.columns:
+        match = re.match(r'^(\d+)_C_', col)
+        if match:
+            entity_ids.add(int(match.group(1)))
+    return sorted(entity_ids)
 
 
-def _narr_cols(name: str) -> Tuple[str, str]:
-    return f"Narrative_{name}_Prominence", f"Narrative_{name}_Sentiment"
+def _narr_cols(narrative_id: int) -> Tuple[str, str]:
+    return f"O_M_{narrative_id}prom", f"O_M_{narrative_id}sent"
 
 
-def _entity_cols(name: str) -> Tuple[str, str, str, str, str, str]:
+def _entity_cols(entity_id: int) -> Tuple[str, str, str, str, str, str]:
     # returns (prom, sent, qual, state, modifier, signals_colname)
     return (
-        f"Entity_{name}_Prominence",
-        f"Entity_{name}_Sentiment",
-        f"Entity_{name}_Quality_Score",
-        f"Entity_{name}_State",
-        f"Entity_{name}_Modifier",
-        f"Entity_{name}_Signals",
+        f"{entity_id}_C_Prom",
+        f"{entity_id}_C_Sent", 
+        f"{entity_id}_Orchestra_Quality_Score",
+        f"Entity_{entity_id}_State",
+        f"Entity_{entity_id}_Modifier",
+        f"Entity_{entity_id}_Signals",
     )
 
 
@@ -166,22 +178,22 @@ def _count_distinct_publications(rows: pd.DataFrame) -> int:
 # ------------------------------
 def compute_topic_signals(df: pd.DataFrame) -> pd.DataFrame:
     df_cur, df_prev, cur_win, _ = _window_splits(df)
-    topic_prom, topic_sent = "Topic_Prominence", "Topic_Sentiment"
+    topic_prom, topic_sent = "O_Sent", "O_Sent"  # Using coded topic columns
     vol_cur = len(df_cur)
     vol_prev = len(df_prev)
-    avg_prom_low = _mean_safe(df_cur.loc[df_cur["Outlet score"].isin(LOW_TIER), topic_prom]) if vol_cur else np.nan
-    avg_prom_mh = _mean_safe(df_cur.loc[df_cur["Outlet score"].isin(MID_HIGH_TIER), topic_prom]) if vol_cur else np.nan
+    avg_prom_low = _mean_safe(df_cur.loc[df_cur["Orchestra_Pub_Tier"].isin(LOW_TIER), topic_prom]) if vol_cur else np.nan
+    avg_prom_mh = _mean_safe(df_cur.loc[df_cur["Orchestra_Pub_Tier"].isin(MID_HIGH_TIER), topic_prom]) if vol_cur else np.nan
     std_prom = _std_safe(df_cur[topic_prom]) if vol_cur else 0.0
     std_sent = _std_safe(df_cur[topic_sent]) if vol_cur else 0.0
 
     # no-narrative share in window
     narratives = _get_narratives(df)
     if narratives:
-        no_narr_mask = (df_cur[[f"Narrative_{n}_Prominence" for n in narratives]] > 0).sum(axis=1) == 0
+        no_narr_mask = (df_cur[[f"O_M_{n}prom" for n in narratives]] > 0).sum(axis=1) == 0
         share_no_narr = float(no_narr_mask.mean())
     else:
         share_no_narr = 0.0
-    share_low_tier = float((df_cur["Outlet score"].isin(LOW_TIER)).mean()) if vol_cur else 0.0
+    share_low_tier = float((df_cur["Orchestra_Pub_Tier"].isin(LOW_TIER)).mean()) if vol_cur else 0.0
     avg_topic_prom = _mean_safe(df_cur[topic_prom]) if vol_cur else np.nan
 
     # init column (dataset-level attaches as a constant per row; we still store on each row for CSV usability)
